@@ -1,10 +1,31 @@
 from torch.utils.data import Dataset
+from torchtext import data
+import numpy as np
 import json
 import util
 import data_utils
 import random
 import h5py
 
+# Names for the "given" tensors.
+_input_names = [
+    "tokens", "context_word_emb", "head_word_emb", "lm_emb", "char_idx", "text_len", "doc_id", "is_training"]
+
+_label_names = [
+    "ner_starts", "ner_ends", "ner_labels", "ner_len",
+    "coref_starts", "coref_ends", "coref_cluster_ids", "coref_len",
+    "rel_e1_starts", "rel_e1_ends", "rel_e2_starts", "rel_e2_ends", "rel_labels", "rel_len"
+]
+
+# _predict_names = [
+#     "candidate_starts", "candidate_ends", "candidate_arg_scores", "candidate_pred_scores", "ner_scores", "arg_scores", "pred_scores",
+#     "candidate_mention_starts", "candidate_mention_ends", "candidate_mention_scores", "mention_starts",
+#     "mention_ends", "antecedents", "antecedent_scores",
+#     "srl_head_scores", "coref_head_scores", "ner_head_scores", "entity_gate", "antecedent_attn",
+#     # Relation stuff.
+#     "candidate_entity_scores", "entity_starts", "entity_ends", "entitiy_scores", "num_entities",
+#     "rel_labels", "rel_scores",
+# ]
 
 class DocumentDataset(Dataset):
     def __init__(self, config):
@@ -12,14 +33,70 @@ class DocumentDataset(Dataset):
         self.lm_file = h5py.File(self.config["lm_path"], "r")
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
+        self.ner_labels = {l: i for i, l in enumerate([""] + config["ner_labels"])}
 
+        self.input_names = _input_names
+        self.label_names = _label_names
+        # self.predict_names = _predict_names
+
+        # Fields declaration
+        self.fields = [
+            ("tokens", data.Field(sequential=True)), # TODO is sequential ok?
+            ("context_word_emb", data.RawField()),
+            ("head_word_emb", data.RawField()),
+            ("lm_emb", data.RawField()),
+            ("char_idx", data.RawField()), # TODO sequential?
+            ("text_len", data.RawField()),
+            ("doc_id", data.RawField()),
+            ("doc_key", data.RawField()),
+            ("is_training", data.RawField()),
+            ("ner_starts", data.RawField()),
+            ("ner_ends", data.RawField()),
+            ("ner_labels", data.RawField()),
+            ("coref_starts", data.RawField()),
+            ("coref_ends", data.RawField()),
+            ("coref_cluster_ids", data.RawField()),
+            ("rel_e1_starts", data.RawField()),
+            ("rel_e1_ends", data.RawField()),
+            ("rel_e2_starts", data.RawField()),
+            ("rel_e2_ends", data.RawField()),
+            ("rel_labels", data.RawField()),
+            ("ner_len", data.RawField()),
+            ("coref_len", data.RawField()),
+            ("rel_len", data.RawField())
+        ]
+
+        self.rel_labels_inv = [""] + config["relation_labels"]
+        if config["filter_reverse_relations"]:
+            self.rel_labels_inv = [r for r in self.rel_labels_inv if "REVERSE" not in r]
+
+        self.rel_labels = {l: i for i, l in enumerate(self.rel_labels_inv)}
+
+        # TODO Understand the difference between the two glove files
+        self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"])
+
+        self.head_embeddings = data_utils.EmbeddingDictionary(
+            config["head_embeddings"],
+            maybe_cache=self.context_embeddings
+        )
+
+        self.char_embedding_size = config["char_embedding_size"]
+        self.char_dict = data_utils.load_char_dict(config["char_vocab_path"])
+
+        self.examples = []
         self._load_data()
 
+        super(DocumentDataset, self).__init__(self.examples, self.fields)
+
     def __len__(self):
-        return len(self.samples)
+        return len(self.examples)
 
     def __getitem__(self, idx):
-        return self.samples[idx]
+        return self.examples[idx]
+
+    @staticmethod
+    def sort_key(ex):
+        return len(ex.text_len)
 
     def _load_data(self):
         with open(self.config["train_path"], "r", encoding='utf8') as f:
@@ -27,14 +104,9 @@ class DocumentDataset(Dataset):
 
         self.populate_sentence_offset(train_examples)
 
-        adaptive_batching = (self.config["max_tokens_per_batch"] > 0)
-
         self._read_documents(train_examples)
 
-
     def _read_documents(self, train_examples):
-        random.shuffle(train_examples)
-
         # List of documents, each holds a list of sentences.
         doc_examples = []
 
@@ -57,9 +129,9 @@ class DocumentDataset(Dataset):
         print("Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
             doc_id, num_sentences, cluster_id_offset, num_mentions))
 
-        for examples in doc_examples:
-          tensor_examples = [self.tensorize_example(e, is_training=True) for e in examples]
-
+        for example_sentences in doc_examples:
+            # TODO is_training should be class-level dynamic
+            [self.tensorize_example(example, is_training=True) for example in example_sentences]
 
     def _split_document_example(self, example):
         """
@@ -130,10 +202,6 @@ class DocumentDataset(Dataset):
         word_offset = example["word_offset"]
         text_len = len(sentence)
 
-        lm_doc_key = None
-        lm_sent_key = None
-        transpose = True
-
         lm_doc_key = doc_key + "_" + str(sent_id)
         transpose = False
 
@@ -141,73 +209,79 @@ class DocumentDataset(Dataset):
         lm_emb = data_utils.load_lm_embeddings_for_sentence(
             self.lm_file,
             lm_doc_key,
-            lm_sent_key,
+            None,
             transpose
         )
 
-        # max_word_length = max(max(len(w) for w in sentence), max(self.config["filter_widths"]))
-        #
-        # # Preapre context word embedding for a sentence
-        # context_word_emb = np.zeros([text_len, self.context_embeddings.size])
-        # head_word_emb = np.zeros([text_len, self.head_embeddings.size])
-        # char_index = np.zeros([text_len, max_word_length])
-        # for j, word in enumerate(sentence):
-        #     context_word_emb[j] = self.context_embeddings[word]
-        #     head_word_emb[j] = self.head_embeddings[word]
-        #     char_index[j, :len(word)] = [self.char_dict[c] for c in word]
-        #
-        # ner_starts, ner_ends, ner_labels = (
-        #     tensorize_labeled_spans(example["ner"], self.ner_labels))
-        # coref_starts, coref_ends, coref_cluster_ids = (
-        #     tensorize_labeled_spans(example["coref"], label_dict=None))
-        # # predicates, arg_starts, arg_ends, arg_labels = (
-        # #     tensorize_srl_relations(example["srl"], self.srl_labels,
-        # #     filter_v_args=self.config["filter_v_args"]))
-        # rel_e1_starts, rel_e1_ends, rel_e2_starts, rel_e2_ends, rel_labels = (
-        #     tensorize_entity_relations(example["relations"], self.rel_labels,
-        #                                filter_reverse=self.config["filter_reverse_relations"]))
-        #
-        # # For gold predicate experiment.
-        # # gold_predicates = get_all_predicates(example["srl"]) - word_offset
-        # example_tensor = {
-        #     # Inputs.
-        #     "tokens": sentence,
-        #     "context_word_emb": context_word_emb,
-        #     "head_word_emb": head_word_emb,
-        #     # Lm embeddings for a sentence
-        #     "lm_emb": lm_emb,
-        #     "char_idx": char_index,
-        #     "text_len": text_len,
-        #     "doc_id": example["doc_id"],
-        #     "doc_key": example["doc_key"],
-        #     "is_training": is_training,
-        #     # "gold_predicates": gold_predicates,
-        #     # "num_gold_predicates": len(gold_predicates),
-        #     # Labels.
-        #     # Word offset to the start of the document since ner_starts is just relevant to the start of the sentence
-        #     "ner_starts": ner_starts - word_offset,
-        #     "ner_ends": ner_ends - word_offset,
-        #
-        #     # Ids of the relations reelative to start and end
-        #     "ner_labels": ner_labels,
-        #     # "predicates": predicates - word_offset,
-        #     # "arg_starts": arg_starts - word_offset,
-        #     # "arg_ends": arg_ends - word_offset,
-        #     # "arg_labels": arg_labels,
-        #     "coref_starts": coref_starts - word_offset,
-        #     "coref_ends": coref_ends - word_offset,
-        #     "coref_cluster_ids": coref_cluster_ids + example["cluster_id_offset"],
-        #     "rel_e1_starts": rel_e1_starts - word_offset,
-        #     "rel_e1_ends": rel_e1_ends - word_offset,
-        #     "rel_e2_starts": rel_e2_starts - word_offset,
-        #     "rel_e2_ends": rel_e2_ends - word_offset,
-        #     "rel_labels": rel_labels,
-        #     # "srl_len": len(predicates),
-        #     "ner_len": len(ner_starts),
-        #     "coref_len": len(coref_starts),
-        #     "rel_len": len(rel_e1_starts)
-        # }
-        # return example_tensor
+        max_word_length = max(max(len(w) for w in sentence), max(self.config["filter_widths"]))
+
+        # TODO convert all numpy into Tensors
+
+        # Prepare context word embedding for a sentence
+        context_word_emb = np.zeros([text_len, self.context_embeddings.size])
+        head_word_emb = np.zeros([text_len, self.head_embeddings.size])
+        char_index = np.zeros([text_len, max_word_length])
+
+        for j, word in enumerate(sentence):
+            context_word_emb[j] = self.context_embeddings[word]
+            head_word_emb[j] = self.head_embeddings[word]
+
+            # Rest is padded with zeros
+            char_index[j, :len(word)] = [self.char_dict[c] for c in word]
+
+        ner_starts, ner_ends, ner_labels = data_utils.tensorize_labeled_spans(
+            example["ner"],
+            self.ner_labels
+        )
+
+        coref_starts, coref_ends, coref_cluster_ids = data_utils.tensorize_labeled_spans(
+            example["coref"]
+        )
+
+        rel_e1_starts, rel_e1_ends, rel_e2_starts, rel_e2_ends, rel_labels = (
+            data_utils.tensorize_entity_relations(
+                example["relations"],
+                self.rel_labels,
+                filter_reverse=self.config["filter_reverse_relations"]
+            )
+        )
+
+        self.examples.append(
+            data.Example.fromlist([
+                # Inputs
+                sentence, # words in sentence (words-in-sent)
+                context_word_emb, # words-in-sent x emb-size
+                head_word_emb, # words-in-sent x emb-size
+                lm_emb, # Lm embeddings for a sentence (words-in-sent x lm-size x lm-layers)
+                char_index,
+                text_len,
+                example["doc_id"],
+                example["doc_key"],
+                is_training,
+
+                # Labels.
+                ner_starts - word_offset,
+                ner_ends - word_offset,
+                ner_labels,
+                coref_starts - word_offset,
+                coref_ends - word_offset,
+                coref_cluster_ids + example["cluster_id_offset"],
+                rel_e1_starts - word_offset,
+                rel_e1_ends - word_offset,
+                rel_e2_starts - word_offset,
+                rel_e2_ends - word_offset,
+                rel_labels, # e.g. "conjunction"
+                len(ner_starts), # entities
+                len(coref_starts), # mentions
+                len(rel_e1_starts) # relations
+            ], self.fields)
+        )
+
+    def fix_batch(self, batch):
+        for field_name, _ in self.fields:
+            setattr(batch, field_name, data_utils.pad_batch_tensors(getattr(batch, field_name)))
+
+
 
 
 
