@@ -3,6 +3,8 @@ import os
 import util
 from torchtext import data
 from document_dataset import DocumentDataset
+from models.model import Model
+
 
 def main():
     # ds = dataset(args)
@@ -23,6 +25,9 @@ def main():
 
     dataset = DocumentDataset(config)
 
+    # TODO is training
+    #model = Model(config, 1)
+
     data_iter = data.Iterator(
         dataset,
         config.batch_size,
@@ -33,17 +38,7 @@ def main():
     )
 
     for batch in data_iter:
-        print(batch.size)
-        print(batch[1][0].size)
-        print(batch[1])
         batch = dataset.fix_batch(batch)
-        print(batch.size)
-        print(batch[1])
-        print(batch[1][0].size)
-        print(batch[1][1].size)
-        print(batch[1][2].size)
-        print(batch[1][3].size)
-        exit()
 
 if __name__ == "__main__":
     main()

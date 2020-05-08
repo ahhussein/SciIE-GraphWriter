@@ -1,4 +1,3 @@
-from torch.utils.data import Dataset
 from torchtext import data
 import numpy as np
 import json
@@ -6,6 +5,7 @@ import util
 import data_utils
 import random
 import h5py
+import torch
 
 # Names for the "given" tensors.
 _input_names = [
@@ -27,7 +27,7 @@ _label_names = [
 #     "rel_labels", "rel_scores",
 # ]
 
-class DocumentDataset(Dataset):
+class DocumentDataset(data.Dataset):
     def __init__(self, config):
         self.config = config
         self.lm_file = h5py.File(self.config["lm_path"], "r")
@@ -41,7 +41,7 @@ class DocumentDataset(Dataset):
 
         # Fields declaration
         self.fields = [
-            ("tokens", data.Field(sequential=True)), # TODO is sequential ok?
+            ("tokens", data.RawField()), # TODO is sequential ok?
             ("context_word_emb", data.RawField()),
             ("head_word_emb", data.RawField()),
             ("lm_emb", data.RawField()),
@@ -218,16 +218,16 @@ class DocumentDataset(Dataset):
         # TODO convert all numpy into Tensors
 
         # Prepare context word embedding for a sentence
-        context_word_emb = np.zeros([text_len, self.context_embeddings.size])
-        head_word_emb = np.zeros([text_len, self.head_embeddings.size])
-        char_index = np.zeros([text_len, max_word_length])
+        context_word_emb = torch.zeros([text_len, self.context_embeddings.size])
+        head_word_emb = torch.zeros([text_len, self.head_embeddings.size])
+        char_index = torch.zeros([text_len, max_word_length])
 
         for j, word in enumerate(sentence):
             context_word_emb[j] = self.context_embeddings[word]
             head_word_emb[j] = self.head_embeddings[word]
 
             # Rest is padded with zeros
-            char_index[j, :len(word)] = [self.char_dict[c] for c in word]
+            char_index[j, :len(word)] = torch.tensor([self.char_dict[c] for c in word])
 
         ner_starts, ner_ends, ner_labels = data_utils.tensorize_labeled_spans(
             example["ner"],
@@ -253,7 +253,7 @@ class DocumentDataset(Dataset):
                 context_word_emb, # words-in-sent x emb-size
                 head_word_emb, # words-in-sent x emb-size
                 lm_emb, # Lm embeddings for a sentence (words-in-sent x lm-size x lm-layers)
-                char_index,
+                char_index, # text-len x max-word-length
                 text_len,
                 example["doc_id"],
                 example["doc_key"],
@@ -278,10 +278,8 @@ class DocumentDataset(Dataset):
         )
 
     def fix_batch(self, batch):
-        for field_name, _ in self.fields:
-            setattr(batch, field_name, data_utils.pad_batch_tensors(getattr(batch, field_name)))
-
-
+        for field in self.fields:
+            setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field)))
 
 
 

@@ -1,5 +1,6 @@
 import numpy as np
 import collections
+import torch
 
 
 class EmbeddingDictionary(object):
@@ -27,7 +28,7 @@ class EmbeddingDictionary(object):
 
         print("Loading word embeddings from {}...".format(path))
 
-        default_embedding = np.zeros(self.size)
+        default_embedding = torch.zeros(self.size)
         embedding_dict = collections.defaultdict(lambda: default_embedding)
 
         if len(path) > 0:
@@ -44,7 +45,7 @@ class EmbeddingDictionary(object):
                     else:
                         assert len(splits) == self.size + 1
                         word = splits[0]
-                        embedding = np.array([float(s) for s in splits[1:]])
+                        embedding = torch.tensor([float(s) for s in splits[1:]])
                         embedding_dict[word] = embedding
                     i += 1
                 f.close()
@@ -80,6 +81,7 @@ def load_lm_embeddings_for_sentence(
     """
     Load LM embeddings for a given sentence.
     """
+    # TODO conver to torch
     # TODO preprocessed embeddings that needs to be adjusted with different datasets
     file_key = doc_key.replace("/", ":")
 
@@ -121,9 +123,9 @@ def tensorize_labeled_spans(tuples, label_dict=None):
         starts, ends, labels = [], [], []
 
     if label_dict:
-        return np.array(starts), np.array(ends), np.array([label_dict.get(c, 0) for c in labels])
+        return torch.tensor(starts), torch.tensor(ends), torch.tensor([label_dict.get(c, 0) for c in labels])
 
-    return np.array(starts), np.array(ends), np.array(labels)
+    return torch.tensor(starts), torch.tensor(ends), torch.tensor(labels)
 
 
 def tensorize_entity_relations(tuples, label_dict, filter_reverse):
@@ -144,23 +146,27 @@ def tensorize_entity_relations(tuples, label_dict, filter_reverse):
     else:
         s1, e1, s2, e2, labels = [], [], [], [], []
 
-    return (np.array(s1), np.array(e1), np.array(s2), np.array(e2),
-            np.array([label_dict.get(c, 0) for c in labels]))
+    return (torch.tensor(s1), torch.tensor(e1), torch.tensor(s2), torch.tensor(e2),
+            torch.tensor([label_dict.get(c, 0) for c in labels]))
 
 
-def pad_batch_tensors(tensor_dicts, tensor_name):
+def pad_batch_tensors(tensors):
     """
     Args:
-      tensor_dicts: List of dictionary tensor_name: numpy array of length B.
-      tensor_name: String name of tensor.
+      tensors: List of tensors: numpy array of length B.
 
     Returns:
       Numpy array of (B, ?)
     """
-    tensors = [np.expand_dims(td[tensor_name], 0) for td in tensor_dicts]
+    tensors = [np.expand_dims(tensor, 0) for tensor in tensors]
+
     shapes = [t.shape for t in tensors]
+
     # Take max shape along each dimension.
-    max_shape = np.max(zip(*shapes), axis=1)
-    zeros = np.zeros_like(max_shape)
-    padded_tensors = [np.pad(t, zip(zeros, max_shape - t.shape), "constant") for t in tensors]
+    max_shape = [max(item) for item in zip(*shapes)]
+
+    pad_shapes = [tuple([tuple((0, a_i - b_i)) for a_i, b_i in zip(max_shape, shape)]) for shape in shapes]
+
+    padded_tensors = [np.pad(tensor, pad_shape, "constant") for tensor, pad_shape in zip(tensors, pad_shapes)]
+
     return np.concatenate(padded_tensors, axis=0)
