@@ -74,7 +74,7 @@ class DocumentDataset(data.Dataset):
 
         # TODO Understand the difference between the two glove files
         self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"])
-
+        #
         self.head_embeddings = data_utils.EmbeddingDictionary(
             config["head_embeddings"],
             maybe_cache=self.context_embeddings
@@ -82,7 +82,6 @@ class DocumentDataset(data.Dataset):
 
         self.char_embedding_size = config["char_embedding_size"]
         self.char_dict = data_utils.load_char_dict(config["char_vocab_path"])
-
         self.examples = []
         self._load_data()
 
@@ -220,8 +219,7 @@ class DocumentDataset(data.Dataset):
         # Prepare context word embedding for a sentence
         context_word_emb = torch.zeros([text_len, self.context_embeddings.size])
         head_word_emb = torch.zeros([text_len, self.head_embeddings.size])
-        char_index = torch.zeros([text_len, max_word_length])
-
+        char_index = torch.zeros([text_len, max_word_length], dtype=torch.long)
         for j, word in enumerate(sentence):
             context_word_emb[j] = self.context_embeddings[word]
             head_word_emb[j] = self.head_embeddings[word]
@@ -277,10 +275,13 @@ class DocumentDataset(data.Dataset):
             ], self.fields)
         )
 
+
     def fix_batch(self, batch):
+        # TODO all should be converted to tensors
         for field in self.fields:
-            setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field)))
+            convert_tensor = True
+            if field in ['tokens', 'doc_id', 'doc_key']:
+                convert_tensor = False
 
-
-
-
+            setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
+        return batch

@@ -1,6 +1,7 @@
 import sys
 import os
 import util
+import data_utils
 from torchtext import data
 from document_dataset import DocumentDataset
 from models.model import Model
@@ -26,19 +27,31 @@ def main():
     dataset = DocumentDataset(config)
 
     # TODO is training
-    #model = Model(config, 1)
+    model = Model(config, dataset)
 
+    for epoch in range(1):
+        train(model, dataset, config)
+
+
+def train(model, dataset, config):
     data_iter = data.Iterator(
         dataset,
         config.batch_size,
-        #device=args.device,
-        sort_key=lambda x:len(x['text_len']),
+        # device=args.device,
+        sort_key=lambda x: len(x['text_len']),
         repeat=False,
         train=True
     )
 
-    for batch in data_iter:
+
+    for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
+
+        x = model(batch)
+
+        # TODO test remove
+        exit()
+
 
 if __name__ == "__main__":
     main()

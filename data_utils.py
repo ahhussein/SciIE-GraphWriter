@@ -101,9 +101,7 @@ def load_lm_embeddings_for_sentence(
 def load_char_dict(char_vocab_path):
     vocab = [u"<unk>"]
     with open(char_vocab_path) as f:
-        print(char_vocab_path)
-        print(f.readlines())
-        vocab.extend(c for c in f.readlines())
+        vocab.extend(c.rstrip("\n") for c in f.readlines())
 
     char_dict = collections.defaultdict(int)
     char_dict.update({c: i for i, c in enumerate(vocab)})
@@ -150,7 +148,7 @@ def tensorize_entity_relations(tuples, label_dict, filter_reverse):
             torch.tensor([label_dict.get(c, 0) for c in labels]))
 
 
-def pad_batch_tensors(tensors):
+def pad_batch_tensors(tensors, convert_tensor=True):
     """
     Args:
       tensors: List of tensors: numpy array of length B.
@@ -169,4 +167,51 @@ def pad_batch_tensors(tensors):
 
     padded_tensors = [np.pad(tensor, pad_shape, "constant") for tensor, pad_shape in zip(tensors, pad_shapes)]
 
+    if convert_tensor:
+        return torch.from_numpy(np.concatenate(padded_tensors, axis=0))
     return np.concatenate(padded_tensors, axis=0)
+
+
+def get_span_candidates(text_len, max_sentence_len, max_mention_width):
+    """
+    Params:
+        text_len: Tensor of [num_sentences,] and it holds sentence lengths in terms of words
+        max_sentence_len: the maximum sentence length
+        max_mention_width: the maximum allowed mention width
+    Returns:
+        candidate_starts: tensor of all possible candidate start [num_sentences, max_mention_width * max_sentence_length]
+        candidate_ends: tensor of all possible span ends [num_sentences, max_mention_width * max_sentence_length]
+        candidate_mask:  Mask to respect the individual sentence lengths
+    """
+
+    num_sentences = text_len.shape[0]
+
+    # [num_sentences, max_mention_width, max_sentence_length]
+    candidate_starts = torch.arange(0, max_sentence_len).unsqueeze(0).unsqueeze(1).repeat(
+        num_sentences, max_mention_width, 1
+    )
+
+    # [1, max_mention_width, 1]
+    candidate_widths = torch.arange(0, max_mention_width).unsqueeze(0).unsqueeze(2)
+
+    # [num_sentences, max_mention_width, max_sentence_length]
+    candidate_ends = candidate_starts + candidate_widths
+
+    # Reshaping both to: [num_sentences, max_mention_width * max_sentence_length]
+    candidate_starts = candidate_starts.view(num_sentences, max_mention_width * max_sentence_len)
+    candidate_ends = candidate_ends.view(num_sentences, max_mention_width * max_sentence_len)
+
+    # [num_sentences, max_mention_width * max_sentence_length]
+    mask_base = text_len.unsqueeze(1).repeat(1, max_mention_width * max_sentence_len)
+
+    candidate_mask = candidate_ends < mask_base
+
+    # Mask to avoid indexing error.
+    # mask start to zero out the corresponding start index
+    candidate_starts = torch.mul(candidate_starts, candidate_mask)
+    candidate_ends = torch.mul(candidate_ends, candidate_mask)
+
+    return candidate_starts, candidate_ends, candidate_mask
+
+
+
