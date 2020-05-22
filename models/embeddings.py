@@ -24,7 +24,10 @@ class CharEmbeddings(nn.Module):
         num_sentences = char_index.shape[0]
         max_sentence_length = char_index.shape[1]
 
+        # [num_sentences, max_sentence_length, max_word_length, emb]
         char_emb = self.embeddings[char_index]
+
+        # [num_sentences * max_sentence_length, max_word_length, emb]
         flattened_char_emb = char_emb.view(num_sentences * max_sentence_length, char_emb.shape[2], -1)
         flattened_char_emb = torch.transpose(flattened_char_emb, 2, 1)
 
@@ -57,7 +60,7 @@ class ElmoEmbeddings(nn.Module):
         # [num_sentences * max_sentence_length * emb, 1]
         flattened_aggregated_lm_emb = torch.matmul(flattened_lm_emb, self.softmax(self.weights).unsqueeze(1))
 
-        # [num_sentences, max_sentence_length, emb
+        # [num_sentences, max_sentence_length, emb]
         return (
             flattened_aggregated_lm_emb.view(num_sentences, max_sentence_length, emb_size) * self.scalar,
             self.weights,
@@ -75,15 +78,18 @@ class Embeddings(nn.Module):
         self.dropout = nn.Dropout(1 - is_training * self.config['lexical_dropout_rate'])
 
     def forward(self, batch):
+        # [num_sentences, max_sentence_length, emb-context]
         context_emb_list = [batch.context_word_emb]
         head_emb_list = [batch.head_word_emb]
 
         # calculate and append char embeddings
+        # [num_sentences, max_sentence_length, emb-char]
         aggregated_char_emb = self.char_embeddings(batch.char_idx)
         context_emb_list.append(aggregated_char_emb)
         head_emb_list.append(aggregated_char_emb)
 
         # calculate and append elmo embeddings
+        # [num_sentences, max_sentence_length, emb-lm]
         aggregated_lm_emb, lm_weights, lm_scaling = self.elmo_embeddings(batch.lm_emb)
         context_emb_list.append(aggregated_lm_emb)
 

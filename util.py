@@ -68,7 +68,7 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.bool):
     if maxlen is None:
         maxlen = lengths.max()
 
-    row_vector = torch.arange(0, maxlen, 1)
+    row_vector = torch.arange(0, maxlen)
     matrix = torch.unsqueeze(lengths, dim=-1)
     mask = row_vector < matrix
 
@@ -106,6 +106,18 @@ def flatten_emb_by_sentence(emb, text_len_mask):
     #     text_len_mask.view(-1).unsqueeze(1).repeat([1, flattened_emb[1]])
     # )
 
+def sparse_to_dense(candidate_mask, num_candidates):
+    candidate_mask = candidate_mask > 0
+    num_sentences = candidate_mask.shape[0]
+    max_num_candidates_per_sentence = candidate_mask.shape[1]
+
+    output = torch.zeros((num_sentences, max_num_candidates_per_sentence), dtype=torch.int32)
+    sparse_indices = candidate_mask.nonzero()
+    sparse_values = torch.arange(num_candidates)
+    for i in range(len(sparse_indices)):
+        output[tuple(sparse_indices[i])] = sparse_values[i]
+
+    return output
 
 def print_range(text, i, j):
     while i <= j:

@@ -251,7 +251,7 @@ class DocumentDataset(data.Dataset):
                 context_word_emb, # words-in-sent x emb-size
                 head_word_emb, # words-in-sent x emb-size
                 lm_emb, # Lm embeddings for a sentence (words-in-sent x lm-size x lm-layers)
-                char_index, # text-len x max-word-length
+                char_index, # words-in-sent x max-word-length
                 text_len,
                 example["doc_id"],
                 example["doc_key"],

@@ -20,6 +20,7 @@ class SpanEmbeddings(nn.Module):
 
     def forward(self, head_emb, context_outputs, span_starts, span_ends):
         """Compute span representation shared across tasks.
+        For each span it computes embs for start word, end word, and the span width
 
         Args:
           head_emb: Tensor of [num_words, emb]
@@ -29,17 +30,20 @@ class SpanEmbeddings(nn.Module):
         """
         text_length = context_outputs.shape[0]
 
+        # [num_words, emb]
         span_start_emb = context_outputs[span_starts]
+        # [num_words, emb]
         span_end_emb = context_outputs[span_ends]
         span_emb_list = [span_start_emb, span_end_emb]
 
+        # [num-spans]
         span_widths = 1 + span_ends - span_starts
         max_arg_width = self.config['max_arg_width']
-        num_heads = self.config['num_attention_heads']
 
         if self.config["use_features"]:
-            span_width_index = span_widths - 1  # [num_spans]
+            span_width_index = span_widths - 1
             # [num_spans, emb]
+            # Embeddings for widths [#num_spans, feature_size]
             span_width_emb = self.dropout(self.embeddings[span_width_index])
             span_emb_list.append(span_width_emb)
 
@@ -73,7 +77,56 @@ class SpanEmbeddings(nn.Module):
                 head_scores[span_indices] + span_indices_log_mask.unsqueeze(2)
             )
 
-            # TODO rest
+            # [num_spans, emb]
+            span_head_emb = torch.sum(span_attention * span_text_emb, 1)
+
+            span_emb_list.append(span_head_emb)
+
+        # [num_spans, emb]
+        span_emb = torch.cat(span_emb_list, 1)
+
+        return span_emb, head_scores, span_text_emb, span_indices, span_indices_log_mask
+
+class UnaryScores(nn.Module):
+    def __init__(self, config, is_training=1):
+        super().__init__()
+        self.config = config
+        self.input = nn.Linear(
+            1270, #TODO
+            self.config["ffnn_size"]
+        )
+
+        self.hidden1 = nn.Linear(
+            self.config["ffnn_size"],
+            self.config["ffnn_size"]
+        )
+
+        self.output = nn.Linear(
+            self.config["ffnn_size"],
+            1
+        )
+
+        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        torch.nn.init.xavier_uniform_(self.input.weight)
+        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.output.weight)
+
+    def forward(self, candidate_span_emb):
+        x = self.output(
+            self.hidden1(
+                self.input(candidate_span_emb)
+            )
+        )
+
+        scores = self.dropout(x)
+
+        # [num_sentences, num_spans] or [k]
+        return torch.squeeze(scores)
+
+
+
+
+
 
 
 
