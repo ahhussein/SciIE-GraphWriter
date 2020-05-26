@@ -5,7 +5,7 @@ from models.lstm import LSTMContextualize
 from models.span_embeddings import SpanEmbeddings, UnaryScores
 import data_utils
 import util
-
+import span_prune_cpp
 
 class Model(nn.Module):
     def __init__(self, config, data, is_training=1):
@@ -96,8 +96,8 @@ class Model(nn.Module):
             flat_candidate_ends
         )
 
-        num_candidates = candidate_span_emb[0]
-        max_num_candidates_per_sentence = candidate_mask[1]
+        num_candidates = candidate_span_emb.shape[0]
+        max_num_candidates_per_sentence = candidate_mask.shape[1]
 
 
         # TODO dense to sparse
@@ -111,18 +111,102 @@ class Model(nn.Module):
         if head_scores is not None:
             predict_dict["head_scores"] = head_scores
 
-        candidate_span_ids = util.sparse_to_dense(candidate_mask, candidate_span_emb.shape[0])
+        candidate_span_ids = util.sparse_to_dense(candidate_mask, candidate_span_emb.shape[0]).type(torch.long)
 
         # [num_sentences, max_num_candidates]
         spans_log_mask = torch.log(candidate_mask.type(torch.float32))
 
         # Get entity representations.
         if self.config["relation_weight"] > 0:
+            # TODO grasp starting here
             # [num_sentences, num_spans]
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
 
             # Adds -inf to the padding entries (spans) # [num_sentences, max_num_candidates]
             candidate_entity_scores = flat_candidate_entity_scores[candidate_span_ids] + spans_log_mask
+
+            # [num_sentences, max_num_ents], ... [num_sentences,], [num_sentences, max_num_ents]
+            entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
+                batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
+            )
+
+            # [num_sentences, max_num_ents]
+            entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
+
+            # [num_sentences, max_num_ents, emb]
+            entity_emb = candidate_span_emb[entity_span_indices]
+
+        # Get coref representations.
+        if self.config["coref_weight"] > 0:
+            candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
+
+            doc_ids = batch.doc_id.unsqueeze(1)
+
+            candidate_doc_ids = torch.masked_select(
+                doc_ids.repeat([1, max_num_candidates_per_sentence]).view(-1),
+                flat_candidate_mask
+            )  # [num_candidates]
+
+            k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"])).type(torch.int32)
+
+            top_mention_indices = span_prune_cpp.extract_spans(
+                candidate_mention_scores.unsqueeze(0),
+                flat_candidate_starts.unsqueeze(0),
+                flat_candidate_ends.unsqueeze(0),
+                k.unsqueeze(0),
+                doc_len,
+                True,
+                True
+            )  # [1, k]
+
+            top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
+            mention_starts = flat_candidate_starts[top_mention_indices]  # [k]
+            mention_ends = flat_candidate_ends[top_mention_indices]  # [k]
+            mention_scores = candidate_mention_scores[top_mention_indices]  # [k]
+            mention_emb = candidate_span_emb[top_mention_indices]  # [k, emb]
+            mention_doc_ids = candidate_doc_ids[top_mention_indices]  # [k]
+
+            if head_scores is not None:
+                predict_dict["coref_head_scores"] = head_scores
+
+            data = torch.zeros(torch.max(mention_doc_ids) + 1).scatter_add(
+                0,
+                mention_doc_ids,
+                torch.ones_like(mention_doc_ids).type(torch.float32)
+            ).type(torch.int64)
+
+            max_mentions_per_doc = torch.max(data)
+
+            max_antecedents = torch.min(
+                torch.min(torch.tensor(self.config["max_antecedents"]), (k - 1).type(torch.int64)),
+                max_mentions_per_doc - 1
+            )
+
+            target_indices = torch.arange(k).unsqueeze(1) # [k, 1]
+            antecedent_offsets = (torch.arange(max_antecedents) + 1).unsqueeze(0) # [1, max_ant]
+            raw_antecedents = target_indices - antecedent_offsets  # [k, max_ant]
+            antecedents = torch.max(raw_antecedents, 0)  # [k, max_ant]
+            target_doc_ids = mention_doc_ids.unsqueeze(1)  # [k, 1]
+            antecedent_doc_ids = mention_doc_ids[antecedents]  # [k, max_ant]
+            antecedent_mask = (
+                (target_doc_ids == antecedent_doc_ids)
+                &
+                raw_antecedents >= 0
+            ) # [k, max_ant]
+
+            antecedent_log_mask = torch.log(antecedent_mask)  # [k, max_ant]
+
+
+
+
+
+
+
+
+
+
+
 
 
 

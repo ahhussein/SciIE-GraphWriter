@@ -5,6 +5,8 @@ import data_utils
 from torchtext import data
 from document_dataset import DocumentDataset
 from models.model import Model
+import torch
+import span_prune_cpp
 
 
 def main():

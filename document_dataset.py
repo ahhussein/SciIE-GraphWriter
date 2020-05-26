@@ -280,8 +280,7 @@ class DocumentDataset(data.Dataset):
         # TODO all should be converted to tensors
         for field in self.fields:
             convert_tensor = True
-            if field in ['tokens', 'doc_id', 'doc_key']:
+            if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
         return batch
