@@ -3,6 +3,7 @@ import torch
 from models.embeddings import Embeddings
 from models.lstm import LSTMContextualize
 from models.span_embeddings import SpanEmbeddings, UnaryScores
+from models.antecedent_score import AntecedentScore
 import data_utils
 import util
 import span_prune_cpp
@@ -16,6 +17,7 @@ class Model(nn.Module):
         self.lstm = LSTMContextualize(config, data, is_training)
         self.span_embeddings = SpanEmbeddings(config, data, is_training)
         self.unary_scores = UnaryScores(config, is_training)
+        self.antecedent_scores = AntecedentScore(config, is_training)
 
     def forward(self, batch):
         max_sentence_length = batch.char_idx.shape[1]
@@ -186,16 +188,37 @@ class Model(nn.Module):
             target_indices = torch.arange(k).unsqueeze(1) # [k, 1]
             antecedent_offsets = (torch.arange(max_antecedents) + 1).unsqueeze(0) # [1, max_ant]
             raw_antecedents = target_indices - antecedent_offsets  # [k, max_ant]
-            antecedents = torch.max(raw_antecedents, 0)  # [k, max_ant]
+            antecedents = torch.max(raw_antecedents, torch.tensor(0))  # [k, max_ant]
             target_doc_ids = mention_doc_ids.unsqueeze(1)  # [k, 1]
+
+
             antecedent_doc_ids = mention_doc_ids[antecedents]  # [k, max_ant]
+
             antecedent_mask = (
                 (target_doc_ids == antecedent_doc_ids)
                 &
-                raw_antecedents >= 0
+                (raw_antecedents >= 0)
             ) # [k, max_ant]
 
-            antecedent_log_mask = torch.log(antecedent_mask)  # [k, max_ant]
+            antecedent_log_mask = torch.log(antecedent_mask.type(torch.float32))  # [k, max_ant]
+
+            # [k, max_ant], [k, max_ant, emb], [k, max_ant, emb2]
+            antecedent_scores, antecedent_emb, pair_emb = self.antecedent_scores(
+                mention_emb, mention_scores, antecedents
+            )  # [k, max_ant]
+
+            antecedent_scores = torch.cat([
+                torch.zeros([k, 1]), antecedent_scores + antecedent_log_mask], 1)  # [k, max_ant+1]
+
+            # Get labels.
+            # if self.config["ner_weight"] + self.config["coref_weight"] > 0:
+            #     gold_ner_labels, gold_coref_cluster_ids = get_span_task_labels(
+            #         candidate_starts, candidate_ends, labels,
+            #         max_sentence_length)  # [num_sentences, max_num_candidates]
+            #
+            #
+            #
+
 
 
 

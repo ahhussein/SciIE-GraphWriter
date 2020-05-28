@@ -4,6 +4,7 @@ import errno
 import torch
 import span_prune_cpp
 import sys
+import math
 
 def get_config(filename):
     return pyhocon.ConfigFactory.parse_file(filename)
@@ -192,6 +193,17 @@ def batch_gather(emb, indices):
     if len(indices.shape) == 3:
         offset = offset.unsqueeze(2)  # [num_sentences, 1, 1]
     return flattened_emb[indices + offset]
+
+def bucket_distance(distances):
+  """
+  Places the given values (designed for distances) into 10 semi-logscale buckets:
+  [0, 1, 2, 3, 4, 5-7, 8-15, 16-31, 32-63, 64+].
+  """
+  logspace_idx = torch.floor((torch.log(distances.type(torch.float32))/math.log(2))).type(torch.int32) + 3
+  use_identity = (distances <= 4).type(torch.int32)
+  combined_idx = use_identity * distances + (1 - use_identity) * logspace_idx
+  return torch.min(combined_idx, torch.tensor(9))
+
 
 
 def print_range(text, i, j):

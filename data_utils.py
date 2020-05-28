@@ -1,6 +1,7 @@
 import numpy as np
 import collections
 import torch
+import util
 
 
 class EmbeddingDictionary(object):
@@ -212,6 +213,46 @@ def get_span_candidates(text_len, max_sentence_len, max_mention_width):
     candidate_ends = torch.mul(candidate_ends, candidate_mask)
 
     return candidate_starts, candidate_ends, candidate_mask
+
+
+def get_dense_span_labels(span_starts, span_ends, span_labels, num_spans, max_sentence_length, span_parents=None):
+    """Utility function to get dense span or span-head labels.
+    Args:
+      span_starts: [num_sentences, max_num_spans]
+      span_ends: [num_sentences, max_num_spans]
+      span_labels: [num_sentences, max_num_spans]
+      num_spans: [num_sentences,]
+      max_sentence_length:
+      span_parents: [num_sentences, max_num_spans]. Predicates in SRL.
+    """
+    num_sentences = span_starts.shape[0]
+    max_num_spans = span_starts.shape[1]
+
+    # For padded spans, we have starts = 1, and ends = 0, so they don't collide with any existing spans.
+    span_starts += (1 - util.sequence_mask(num_spans, dtype=torch.int32))  # [num_sentences, max_num_spans]
+    sentences_indices = torch.arange(num_sentences).unsqueeze(1).repeat([1, max_num_spans]) # [num_sentences, max_num_spans]
+    sparse_indices = torch.cat([
+        sentences_indices.unsqueeze(2),
+        span_starts.unsqueeze(2),
+        span_ends.unsqueeze(3)
+    ])
+    sparse_indices = tf.concat([
+        tf.expand_dims(sentence_indices, 2),
+        tf.expand_dims(span_starts, 2),
+        tf.expand_dims(span_ends, 2)], axis=2)  # [num_sentences, max_num_spans, 3]
+    if span_parents is not None:
+        sparse_indices = tf.concat([
+            sparse_indices, tf.expand_dims(span_parents, 2)], axis=2)  # [num_sentenes, max_num_spans, 4]
+
+    rank = 3 if (span_parents is None) else 4
+    # (sent_id, span_start, span_end) -> span_label
+    dense_labels = tf.sparse_to_dense(
+        sparse_indices=tf.reshape(sparse_indices, [num_sentences * max_num_spans, rank]),
+        output_shape=[num_sentences] + [max_sentence_length] * (rank - 1),
+        sparse_values=tf.reshape(span_labels, [-1]),
+        default_value=0,
+        validate_indices=False)  # [num_sentences, max_sent_len, max_sent_len]
+    return dense_labels
 
 
 
