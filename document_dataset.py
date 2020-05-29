@@ -283,4 +283,14 @@ class DocumentDataset(data.Dataset):
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
+
+        batch.ner_starts = batch.ner_starts.type(torch.int64)
+        batch.ner_ends = batch.ner_ends.type(torch.int64)
+        batch.coref_starts = batch.coref_starts.type(torch.int64)
+        batch.coref_ends = batch.coref_ends.type(torch.int64)
+        batch.rel_e1_starts = batch.rel_e1_starts.type(torch.int64)
+        batch.rel_e1_ends = batch.rel_e1_ends.type(torch.int64)
+        batch.rel_e2_starts = batch.rel_e2_starts.type(torch.int64)
+        batch.rel_e2_ends = batch.rel_e2_ends.type(torch.int64)
+
         return batch

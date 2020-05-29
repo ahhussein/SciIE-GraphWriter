@@ -215,6 +215,34 @@ def get_span_candidates(text_len, max_sentence_len, max_mention_width):
     return candidate_starts, candidate_ends, candidate_mask
 
 
+def get_span_task_labels(arg_starts, arg_ends, batch, max_sentence_length):
+    """Get dense labels for NER/Constituents (unary span prediction tasks).
+    """
+    num_sentences = arg_starts.shape[0]
+    max_num_args = arg_starts.shape[1]
+    # [num_sentences, max_num_args]
+    sentence_indices = torch.arange(num_sentences).unsqueeze(1).repeat([1, max_num_args])
+
+    # [num_sentences, max_num_args, 3]
+    pred_indices = torch.cat([
+        sentence_indices.unsqueeze(2),
+        arg_starts.unsqueeze(2),
+        arg_ends.unsqueeze(2)], 2
+    )
+
+    dense_ner_labels = get_dense_span_labels(
+        batch.ner_starts, batch.ner_ends, batch.ner_labels, batch.ner_len,
+        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len]
+
+    dense_coref_labels = get_dense_span_labels(
+        batch.coref_starts, batch.coref_ends, batch.coref_cluster_ids, batch.coref_len,
+        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len]
+
+    ner_labels = gather_nd(dense_ner_labels, pred_indices)  # [num_sentences, max_num_args]
+    coref_cluster_ids = gather_nd(dense_coref_labels, pred_indices)  # [num_sentences, max_num_args]
+    return ner_labels, coref_cluster_ids
+
+
 def get_dense_span_labels(span_starts, span_ends, span_labels, num_spans, max_sentence_length, span_parents=None):
     """Utility function to get dense span or span-head labels.
     Args:
@@ -230,29 +258,79 @@ def get_dense_span_labels(span_starts, span_ends, span_labels, num_spans, max_se
 
     # For padded spans, we have starts = 1, and ends = 0, so they don't collide with any existing spans.
     span_starts += (1 - util.sequence_mask(num_spans, dtype=torch.int32))  # [num_sentences, max_num_spans]
-    sentences_indices = torch.arange(num_sentences).unsqueeze(1).repeat([1, max_num_spans]) # [num_sentences, max_num_spans]
+    sentences_indices = torch.arange(num_sentences).unsqueeze(1).repeat(
+        [1, max_num_spans])  # [num_sentences, max_num_spans]
+
     sparse_indices = torch.cat([
         sentences_indices.unsqueeze(2),
         span_starts.unsqueeze(2),
-        span_ends.unsqueeze(3)
-    ])
-    sparse_indices = tf.concat([
-        tf.expand_dims(sentence_indices, 2),
-        tf.expand_dims(span_starts, 2),
-        tf.expand_dims(span_ends, 2)], axis=2)  # [num_sentences, max_num_spans, 3]
+        span_ends.unsqueeze(2)
+    ], 2)  # [num_sentences, max_num_spans, 3]
+
     if span_parents is not None:
-        sparse_indices = tf.concat([
-            sparse_indices, tf.expand_dims(span_parents, 2)], axis=2)  # [num_sentenes, max_num_spans, 4]
+        # [num_sentenes, max_num_spans, 4]
+        sparse_indices = torch.cat([sparse_indices, span_parents.unsqueeze(2)], 2)
 
     rank = 3 if (span_parents is None) else 4
+
+    sparse_indices = sparse_indices.view([num_sentences * max_num_spans, rank])
+    sparse_values = span_labels.view(-1)
+    dense_labels = torch.zeros([num_sentences] + [max_sentence_length] * (rank - 1), dtype=torch.int32)
+
+    for i in range(len(sparse_indices)):
+        dense_labels[tuple(sparse_indices[i])] = sparse_values[i]
+
     # (sent_id, span_start, span_end) -> span_label
-    dense_labels = tf.sparse_to_dense(
-        sparse_indices=tf.reshape(sparse_indices, [num_sentences * max_num_spans, rank]),
-        output_shape=[num_sentences] + [max_sentence_length] * (rank - 1),
-        sparse_values=tf.reshape(span_labels, [-1]),
-        default_value=0,
-        validate_indices=False)  # [num_sentences, max_sent_len, max_sent_len]
     return dense_labels
 
 
+def gather_nd(params, indices):
+    '''
+    4D example
+    params: tensor shaped [n_1, n_2, n_3, n_4] --> 4 dimensional
+    indices: tensor shaped [m_1, m_2, m_3, m_4, 4] --> multidimensional list of 4D indices
 
+    returns: tensor shaped [m_1, m_2, m_3, m_4]
+
+    ND_example
+    params: tensor shaped [n_1, ..., n_p] --> d-dimensional tensor
+    indices: tensor shaped [m_1, ..., m_i, d] --> multidimensional list of d-dimensional indices
+
+    returns: tensor shaped [m_1, ..., m_1]
+    '''
+
+    out_shape = indices.shape[:-1]
+    indices = indices.unsqueeze(0).transpose(0, -1)  # roll last axis to fring
+    ndim = indices.shape[0]
+    indices = indices.long()
+    idx = torch.zeros_like(indices[0], device=indices.device).long()
+    m = 1
+
+    for i in range(ndim)[::-1]:
+        idx += indices[i] * m
+        m *= params.size(i)
+    out = torch.take(params, idx)
+    return out.view(out_shape)
+
+
+def get_relation_labels(entity_starts, entity_ends, num_entities, max_sentence_length,
+                        gold_e1_starts, gold_e1_ends, gold_e2_starts, gold_e2_ends,
+                        gold_labels, num_gold_rels):
+    num_sentences, max_num_ents = entity_starts.shape
+    rel_labels = torch.zeros([num_sentences, max_num_ents + 1, max_num_ents + 1], dtype=torch.int64)
+    entity_ids = torch.zeros([num_sentences, max_sentence_length, max_sentence_length], dtype=torch.int64)
+
+    for i in range(num_sentences):
+        for j in range(num_entities[i]):
+            entity_ids[i, entity_starts[i, j], entity_ends[i, j]] = j + 1
+        for j in range(num_gold_rels[i]):
+            rel_labels[i, entity_ids[i, gold_e1_starts[i, j], gold_e1_ends[i, j]],
+                       entity_ids[i, gold_e2_starts[i, j], gold_e2_ends[i, j]]] = gold_labels[i, j]
+    return rel_labels[:, 1:, 1:]  # Remove "dummy" entities.
+
+
+def get_coref_softmax_loss(antecedent_scores, antecedent_labels):
+    gold_scores = antecedent_scores + torch.log(antecedent_labels.type(torch.float32))  # [k, max_ant + 1]
+    marginalized_gold_scores = torch.logsumexp(gold_scores, [1])  # [k]
+    log_norm = torch.logsumexp(antecedent_scores, [1])  # [k]
+    return log_norm - marginalized_gold_scores  # [k]

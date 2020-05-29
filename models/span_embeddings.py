@@ -124,6 +124,149 @@ class UnaryScores(nn.Module):
         return torch.squeeze(scores)
 
 
+class RelScores(nn.Module):
+    def __init__(self, config, num_labels, is_training=1):
+        super().__init__()
+        self.num_labels = num_labels
+        self.config = config
+        self.input = nn.Linear(
+            3810, #TODO
+            self.config["ffnn_size"]
+        )
+
+        self.hidden1 = nn.Linear(
+            self.config["ffnn_size"],
+            self.config["ffnn_size"]
+        )
+
+        self.output = nn.Linear(
+            self.config["ffnn_size"],
+            num_labels - 1
+        )
+
+        self.loss = nn.CrossEntropyLoss()
+
+        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        torch.nn.init.xavier_uniform_(self.input.weight)
+        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.output.weight)
+
+    def forward(self, entity_emb, entity_scores, rel_labels, num_predicted_entities):
+        num_sentences = entity_emb.shape[0]
+        num_entities = entity_emb.shape[1]
+
+        e1_emb_expanded = entity_emb.unsqueeze(2)  # [num_sents, num_ents, 1, emb]
+        e2_emb_expanded = entity_emb.unsqueeze(1)  # [num_sents, 1, num_ents, emb]
+        e1_emb_tiled = e1_emb_expanded.repeat([1, 1, num_entities, 1])  # [num_sents, num_ents, num_ents, emb]
+        e2_emb_tiled = e2_emb_expanded.repeat([1, num_entities, 1, 1])  # [num_sents, num_ents, num_ents, emb]
+
+        similarity_emb = e1_emb_expanded * e2_emb_expanded  # [num_sents, num_ents, num_ents, emb]
+        pair_emb_list = [e1_emb_tiled, e2_emb_tiled, similarity_emb]
+        pair_emb = torch.cat(pair_emb_list, 3)  # [num_sentences, num_ents, num_ents, emb]
+        pair_emb_size = pair_emb.shape[3]
+        flat_pair_emb = pair_emb.view([num_sentences * num_entities * num_entities, pair_emb_size])
+
+        x = self.output(
+            self.hidden1(
+                self.input(flat_pair_emb)
+            )
+        )
+
+        scores = self.dropout(x)
+
+        # [num_sentences * num_ents * num_ents, 1]
+        flat_rel_scores = torch.squeeze(scores)
+
+        rel_scores = flat_rel_scores.view([num_sentences, num_entities, num_entities, self.num_labels - 1])
+        # [num_sentences, ents, max_num_ents, num_labels-1]
+        rel_scores += entity_scores.unsqueeze(2).unsqueeze(3) + entity_scores.unsqueeze(1).unsqueeze(3)
+
+        dummy_scores = torch.zeros([num_sentences, num_entities, num_entities, 1], dtype=torch.float32)
+        # [num_sentences, max_num_ents, max_num_ents, num_labels]
+        rel_scores = torch.cat([dummy_scores, rel_scores], 3)
+
+        max_num_entities = rel_scores.shape[1]
+        num_labels = rel_scores.shape[3]
+        entities_mask = util.sequence_mask(num_predicted_entities, max_num_entities)  # [num_sentences, max_num_entities]
+
+        rel_loss_mask = (
+            entities_mask.unsqueeze(2) # [num_sentences, max_num_entities, 1]
+            &
+            entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
+        )  # [num_sentences, max_num_entities, max_num_entities]
+
+        loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
+
+        loss = torch.masked_select(loss, rel_loss_mask.view(-1))
+        return rel_scores, torch.sum(loss)
+
+class NerScores(nn.Module):
+    def __init__(self, config, num_labels, is_training=1):
+        super().__init__()
+        self.num_labels = num_labels
+        self.config = config
+        self.input = nn.Linear(
+            1270, #TODO
+            self.config["ffnn_size"]
+        )
+
+        self.hidden1 = nn.Linear(
+            self.config["ffnn_size"],
+            self.config["ffnn_size"]
+        )
+
+        self.output = nn.Linear(
+            self.config["ffnn_size"],
+            num_labels - 1
+        )
+
+        self.loss = nn.CrossEntropyLoss()
+
+        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        torch.nn.init.xavier_uniform_(self.input.weight)
+        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.output.weight)
+
+    def forward(self, candidate_span_emb, flat_candidate_entity_scores,
+                candidate_span_ids, spans_log_mask, dummy_scores,
+                gold_ner_labels, candidate_mask
+    ):
+        x = self.output(
+            self.hidden1(
+                self.input(candidate_span_emb)
+            )
+        )
+
+        flat_ner_scores = torch.squeeze(self.dropout(x))
+
+        if self.config["span_score_weight"] > 0:
+            flat_ner_scores += (
+                    self.config["span_score_weight"] * flat_candidate_entity_scores.unsqueeze(1)
+            )
+
+        # [num_sentences, max_num_candidates, num_labels-1]
+        ner_scores = flat_ner_scores[candidate_span_ids] + spans_log_mask.unsqueeze(2)
+
+        ner_scores = torch.cat([dummy_scores, ner_scores], 2)  # [num_sentences, max_num_candidates, num_labels]
+
+        num_labels = ner_scores.shape[2]
+
+        #TODO urgent, is that the right loss
+        ner_loss = self.loss(ner_scores.view([-1, num_labels]), gold_ner_labels.type(torch.int64).view(-1))
+
+        ner_loss = torch.sum(torch.masked_select(ner_loss, candidate_mask.view(-1)))
+
+        return flat_ner_scores, ner_loss
+
+
+
+
+
+
+
+
+
+
 
 
 

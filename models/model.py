@@ -2,7 +2,7 @@ from torch import nn
 import torch
 from models.embeddings import Embeddings
 from models.lstm import LSTMContextualize
-from models.span_embeddings import SpanEmbeddings, UnaryScores
+from models.span_embeddings import SpanEmbeddings, UnaryScores, RelScores, NerScores
 from models.antecedent_score import AntecedentScore
 import data_utils
 import util
@@ -18,6 +18,8 @@ class Model(nn.Module):
         self.span_embeddings = SpanEmbeddings(config, data, is_training)
         self.unary_scores = UnaryScores(config, is_training)
         self.antecedent_scores = AntecedentScore(config, is_training)
+        self.rel_scores = RelScores(config, len(self.data.rel_labels), is_training)
+        self.ner_scores = NerScores(config, len(self.data.ner_labels), is_training)
 
     def forward(self, batch):
         max_sentence_length = batch.char_idx.shape[1]
@@ -211,49 +213,84 @@ class Model(nn.Module):
                 torch.zeros([k, 1]), antecedent_scores + antecedent_log_mask], 1)  # [k, max_ant+1]
 
             # Get labels.
-            # if self.config["ner_weight"] + self.config["coref_weight"] > 0:
-            #     gold_ner_labels, gold_coref_cluster_ids = get_span_task_labels(
-            #         candidate_starts, candidate_ends, labels,
-            #         max_sentence_length)  # [num_sentences, max_num_candidates]
-            #
-            #
-            #
+            if self.config["ner_weight"] + self.config["coref_weight"] > 0:
+                gold_ner_labels, gold_coref_cluster_ids = data_utils.get_span_task_labels(
+                    candidate_starts, candidate_ends, batch,
+                    max_sentence_length)  # [num_sentences, max_num_candidates]
 
 
+            if self.config["relation_weight"] > 0:
+                rel_labels = data_utils.get_relation_labels(
+                    entity_starts, entity_ends, num_entities, max_sentence_length,
+                    batch.rel_e1_starts, batch.rel_e1_ends, batch.rel_e2_starts, batch.rel_e2_ends,
+                    batch.rel_labels, batch.rel_len
+                )  # [num_sentences, max_num_ents, max_num_ents]
 
+                rel_scores, rel_loss = self.rel_scores(
+                    entity_emb, entity_scores, rel_labels, num_entities
+                )  # [num_sentences, max_num_ents, max_num_ents, num_labels]
 
+                predict_dict.update({
+                    "candidate_entity_scores": candidate_entity_scores,
+                    "entity_starts": entity_starts,
+                    "entity_ends": entity_ends,
+                    "entitiy_scores": entity_scores,
+                    "num_entities": num_entities,
+                    "rel_labels": torch.argmax(rel_scores, -1),  # [num_sentences, num_ents, num_ents]
+                    "rel_scores": rel_scores
+                })
+            else:
+                rel_loss = 0
 
+            # Compute Coref loss.
+            if self.config["coref_weight"] > 0:
+                flat_cluster_ids = gold_coref_cluster_ids.view(-1)[flat_candidate_mask]  # [num_candidates]
+                mention_cluster_ids = flat_cluster_ids[top_mention_indices]  # [k]
 
+                antecedent_cluster_ids = mention_cluster_ids[antecedents]  # [k, max_ant]
+                antecedent_cluster_ids += antecedent_log_mask.type(torch.int32)  # [k, max_ant]
+                same_cluster_indicator = (
+                    antecedent_cluster_ids == mention_cluster_ids.unsqueeze(1)
+                )  # [k, max_ant]
+                non_dummy_indicator = (mention_cluster_ids > 0).unsqueeze(1)  # [k, 1]
+                pairwise_labels = (same_cluster_indicator & non_dummy_indicator)  # [k, max_ant]
 
+                dummy_labels = ~(torch.sum(pairwise_labels, 1, keepdim=True) > 0)# [k, 1]
+                antecedent_labels = torch.cat([dummy_labels, pairwise_labels], 1)  # [k, max_ant+1]
+                coref_loss = data_utils.get_coref_softmax_loss(antecedent_scores, antecedent_labels)  # [k]
+                coref_loss = torch.sum(coref_loss)
 
+                predict_dict.update({
+                    "candidate_mention_starts": flat_candidate_starts,  # [num_candidates]
+                    "candidate_mention_ends": flat_candidate_ends,  # [num_candidates]
+                    "candidate_mention_scores": candidate_mention_scores,  # [num_candidates]
+                    "mention_starts": mention_starts,  # [k]
+                    "mention_ends": mention_ends,  # [k]
+                    "antecedents": antecedents,  # [k, max_ant]
+                    "antecedent_scores": antecedent_scores,  # [k, max_ant+1]
+                })
+            else:
+                coref_loss = 0
 
+            dummy_scores = torch.zeros_like(candidate_span_ids, dtype=torch.float32).unsqueeze(2)
 
+            if self.config["ner_weight"] > 0:
+                # [num_candidates, num_labels-1]
+                flat_ner_scores, ner_loss = self.ner_scores(
+                    candidate_span_emb,
+                    flat_candidate_entity_scores,
+                    candidate_span_ids,
+                    spans_log_mask,
+                    dummy_scores,
+                    gold_ner_labels,
+                    candidate_mask
+                )
 
+                predict_dict["ner_scores"] = ner_loss
 
+            loss = (self.config["ner_weight"] * ner_loss + (
+                            self.config["coref_weight"] * coref_loss + self.config["relation_weight"] * rel_loss
+                        )
+                    )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            return predict_dict, loss

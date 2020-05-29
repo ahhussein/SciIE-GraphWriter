@@ -49,11 +49,7 @@ def train(model, dataset, config):
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
 
-        x = model(batch)
-
-        # TODO test remove
-        exit()
-
+        predict_dict, loss = model(batch)
 
 if __name__ == "__main__":
     main()

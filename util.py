@@ -122,7 +122,6 @@ def sparse_to_dense(candidate_mask, num_candidates):
 
     return output
 
-
 def get_batch_topk(
         candidate_starts,
         candidate_ends,
@@ -133,15 +132,6 @@ def get_batch_topk(
         sort_spans=False,
         enforce_non_crossing=True
 ):
-    """
-      Args:
-        candidate_starts: [num_sentences, max_num_candidates]
-        candidate_mask: [num_sentences, max_num_candidates]
-        topk_ratio: A float number.
-        text_len: [num_sentences,]
-        max_sentence_length:
-        enforce_non_crossing: Use regular top-k op if set to False.
-     """
     num_sentences = candidate_starts.shape[0]
 
     # [num_sentences]
@@ -168,8 +158,8 @@ def get_batch_topk(
         candidate_ends,
         topk,
         max_sentence_length,
-        False,
-        True
+        sort_spans,
+        enforce_non_crossing
     )
 
     predicted_indices = predicted_indices.type(torch.int64)
