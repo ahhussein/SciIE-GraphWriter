@@ -38,8 +38,9 @@ def main():
     for epoch in range(20):
         predict_dict, loss = train(model, dataset, config, optimizer)
 
-        if epoch % 1 == 0:
+        if epoch % report_frequency == 0:
             print(epoch+1, loss)
+            torch.save(model.state_dict(), config['log_dir'])
 
         scheduler.step()
 

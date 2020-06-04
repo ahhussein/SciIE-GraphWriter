@@ -294,3 +294,38 @@ class DocumentDataset(data.Dataset):
         batch.rel_e2_ends = batch.rel_e2_ends.type(torch.int64)
 
         return batch
+
+    def load_eval_data(self):
+        eval_data = []
+        eval_tensors = []
+        coref_eval_data = []
+
+        with open(self.config["eval_path"]) as f:
+            eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+
+        self.populate_sentence_offset(eval_examples)
+
+        for doc_id, document in enumerate(eval_examples,1):
+            doc_tensors = []
+            num_mentions_in_doc = 0
+
+            for example in self.split_document_example(document):
+                # Because each batch=1 document at test time, we do not need to offset cluster ids.
+                example["cluster_id_offset"] = 0
+                example["doc_id"] = doc_id
+                doc_tensors.append(self.tensorize_example(example, is_training=False))
+                num_mentions_in_doc += len(example["coref"])
+
+            assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
+
+
+            # TODO
+            eval_tensors.append(doc_tensors)
+            eval_data.extend(srl_eval_utils.split_example_for_eval(document))
+            coref_eval_data.append(document)
+
+        print("Loaded {} eval examples.".format(len(eval_data)))
+        return eval_data, eval_tensors, coref_eval_data
+
+
+
