@@ -15,27 +15,35 @@ def main():
         name = sys.argv[1]
     else:
         name = "scientific_best_ner"
-        #raise Exception('Experiment name has to be provided')
 
     config = util.get_config("experiments.conf")[name]
+    report_frequency = config["report_frequency"]
 
-    #config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
+    config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
 
-    #util.print_config(config)
-    #print(os.environ)
+    util.print_config(config)
 
     util.set_gpus(0)
 
+    # TODO test data set
     dataset = DocumentDataset(config)
 
     # TODO is training
     model = Model(config, dataset)
 
-    for epoch in range(1):
-        train(model, dataset, config)
+    # TODO clip gradients? see TF srl_model
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=config["decay_rate"])
 
+    for epoch in range(20):
+        predict_dict, loss = train(model, dataset, config, optimizer)
 
-def train(model, dataset, config):
+        if epoch % 1 == 0:
+            print(epoch+1, loss)
+
+        scheduler.step()
+
+def train(model, dataset, config, optimizer):
     data_iter = data.Iterator(
         dataset,
         config.batch_size,
@@ -45,11 +53,20 @@ def train(model, dataset, config):
         train=True
     )
 
-
+    l = 0
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
 
         predict_dict, loss = model(batch)
+
+        # Zero gradients, perform a backward pass, and update the weights.
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        l += loss
+
+    return predict_dict, l/(count+1)
 
 if __name__ == "__main__":
     main()

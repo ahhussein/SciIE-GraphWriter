@@ -31,11 +31,6 @@ class Model(nn.Module):
         # [max-num_sentences, max-sentence-lenth, num-dir=2 * hz]
         context_outputs = self.lstm(context_emb)
 
-        # TODO test lines
-        # print('context_emb - lstm out')
-        # print(context_outputs.shape)
-        # print(context_outputs)
-
         # [num_sentences, max_mention_width * max_sentence_length]
         candidate_starts, candidate_ends, candidate_mask = data_utils.get_span_candidates(
             batch.text_len,
@@ -43,28 +38,11 @@ class Model(nn.Module):
             self.config['max_arg_width']
         )
 
-        # # TODO test lines
-        # print('candidate start shape')
-        # print(candidate_starts.shape)
-        #
-        # print('candidate mask shape')
-        # print(candidate_mask.shape)
-        #
-        # print('candidate start')
-        # print(candidate_starts)
-        # print('candidate ends')
-        # print(candidate_ends)
-        # print('mask')
-        # print(candidate_mask)
-
         flat_candidate_mask = candidate_mask.view(-1) # [num_sentences * max_mention_width * max_sentence_length]
 
         # Perform exclusive cum sum
         batch_word_offset = torch.cumsum(batch.text_len, 0).roll(1).unsqueeze(1)
         batch_word_offset[0] = 0 # [num_sentences, 1]
-        # print('cum sum offsets')
-        # print(batch.text_len)
-        # print(batch_word_offset)
 
         # broadcast offset shifting to all sentences, and apply mask select
         # [num_candidates]
@@ -72,8 +50,6 @@ class Model(nn.Module):
             (candidate_starts + batch_word_offset).view(-1),
             flat_candidate_mask
         )
-        # print("flat candidate start")
-        # print(flat_candidate_starts)
 
         # [num_candidates], words offsets added to remove sentence boundaries
         flat_candidate_ends = torch.masked_select(
@@ -104,10 +80,8 @@ class Model(nn.Module):
         max_num_candidates_per_sentence = candidate_mask.shape[1]
 
 
-        # TODO dense to sparse
-
         # [num_sentences, max_num_candidates_per_sentence]
-        span_log_mask = torch.log(candidate_mask.type(torch.float32))
+        #spans_log_mask = torch.log(candidate_mask.type(torch.float32))
 
         # TODO what is that used for?
         predict_dict = {"candidate_starts": candidate_starts, "candidate_ends": candidate_ends}

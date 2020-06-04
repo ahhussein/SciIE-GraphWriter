@@ -16,8 +16,10 @@ class CharEmbeddings(nn.Module):
                 )
             )
 
+        emb = torch.empty(len(data.char_dict), data.char_embedding_size)
+        nn.init.xavier_uniform_(emb)
         self.relu = nn.ReLU()  # [num_words, num_chars - filter_size, num_filters]
-        self.embeddings = nn.init.xavier_uniform_(torch.empty(len(data.char_dict), data.char_embedding_size))
+        self.embeddings = nn.Parameter(emb)
 
     def forward(self, char_index):
         # number-sentences x max-sentence-length x max-word-length (over all sentences)
@@ -29,15 +31,13 @@ class CharEmbeddings(nn.Module):
 
         # [num_sentences * max_sentence_length, max_word_length, emb]
         flattened_char_emb = char_emb.view(num_sentences * max_sentence_length, char_emb.shape[2], -1)
-        flattened_char_emb = torch.transpose(flattened_char_emb, 2, 1)
 
+        flattened_char_emb = torch.transpose(flattened_char_emb, 2, 1)
         outputs = []
         for cnn in self.cnns:
             conv, indices = torch.max(self.relu(cnn(flattened_char_emb)), 2)
             outputs.append(conv)
-
         concatenated = torch.cat(outputs, 1) #[num-words, num-filters * len(filter-sizes)]
-
         return concatenated.view(num_sentences, max_sentence_length, -1) # [num_sentences, max_sentence_length, emb]
 
 
@@ -45,8 +45,13 @@ class ElmoEmbeddings(nn.Module):
     def __init__(self, config, data):
         super().__init__()
         self.data = data
-        self.weights = nn.init.constant_(torch.empty(data.lm_layers), 0.0)
-        self.scalar = nn.init.constant_(torch.empty(1), 1.0)
+        weight = torch.empty(data.lm_layers)
+        nn.init.constant_(weight, 0.0)
+        self.weights = nn.Parameter(weight)
+
+        scalar = torch.empty(1)
+        nn.init.constant_(scalar, 1.0)
+        self.scalar = nn.Parameter(scalar)
         self.softmax = nn.Softmax(0)
 
     def forward(self, lm_emb):
@@ -59,7 +64,6 @@ class ElmoEmbeddings(nn.Module):
 
         # [num_sentences * max_sentence_length * emb, 1]
         flattened_aggregated_lm_emb = torch.matmul(flattened_lm_emb, self.softmax(self.weights).unsqueeze(1))
-
         # [num_sentences, max_sentence_length, emb]
         return (
             flattened_aggregated_lm_emb.view(num_sentences, max_sentence_length, emb_size) * self.scalar,

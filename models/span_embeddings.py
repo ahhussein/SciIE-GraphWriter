@@ -7,9 +7,11 @@ class SpanEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         self.data = data
-        self.embeddings = nn.init.xavier_uniform_(
-            torch.empty(self.config['max_arg_width'], self.config['feature_size'])
-        )
+
+        emb = torch.empty(self.config['max_arg_width'], self.config['feature_size'])
+        nn.init.xavier_uniform_(emb)
+        self.embeddings = nn.Parameter(emb)
+
         self.softmax = nn.Softmax(1)
         self.dropout = nn.Dropout(1- is_training * self.config['dropout_rate'])
         self.ffnn = nn.Linear(
@@ -144,7 +146,7 @@ class RelScores(nn.Module):
             num_labels - 1
         )
 
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
 
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
@@ -195,9 +197,12 @@ class RelScores(nn.Module):
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
 
+        torch.set_printoptions(profile="full")
+
         loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
 
         loss = torch.masked_select(loss, rel_loss_mask.view(-1))
+
         return rel_scores, torch.sum(loss)
 
 class NerScores(nn.Module):
@@ -220,7 +225,7 @@ class NerScores(nn.Module):
             num_labels - 1
         )
 
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
 
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
@@ -251,7 +256,6 @@ class NerScores(nn.Module):
 
         num_labels = ner_scores.shape[2]
 
-        #TODO urgent, is that the right loss
         ner_loss = self.loss(ner_scores.view([-1, num_labels]), gold_ner_labels.type(torch.int64).view(-1))
 
         ner_loss = torch.sum(torch.masked_select(ner_loss, candidate_mask.view(-1)))
