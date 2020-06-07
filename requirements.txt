@@ -1,0 +1,7 @@
+torch
+torchtext
+scikit-learn
+pyhocon
+pybind11
+numpy
+h5py
