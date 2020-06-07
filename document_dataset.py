@@ -5,6 +5,7 @@ import util
 import data_utils
 import random
 import h5py
+
 import torch
 
 # Names for the "given" tensors.
@@ -17,15 +18,15 @@ _label_names = [
     "rel_e1_starts", "rel_e1_ends", "rel_e2_starts", "rel_e2_ends", "rel_labels", "rel_len"
 ]
 
-# _predict_names = [
-#     "candidate_starts", "candidate_ends", "candidate_arg_scores", "candidate_pred_scores", "ner_scores", "arg_scores", "pred_scores",
-#     "candidate_mention_starts", "candidate_mention_ends", "candidate_mention_scores", "mention_starts",
-#     "mention_ends", "antecedents", "antecedent_scores",
-#     "srl_head_scores", "coref_head_scores", "ner_head_scores", "entity_gate", "antecedent_attn",
-#     # Relation stuff.
-#     "candidate_entity_scores", "entity_starts", "entity_ends", "entitiy_scores", "num_entities",
-#     "rel_labels", "rel_scores",
-# ]
+_predict_names = [
+    "candidate_starts", "candidate_ends", "candidate_arg_scores", "candidate_pred_scores", "ner_scores", "arg_scores", "pred_scores",
+    "candidate_mention_starts", "candidate_mention_ends", "candidate_mention_scores", "mention_starts",
+    "mention_ends", "antecedents", "antecedent_scores",
+    "srl_head_scores", "coref_head_scores", "ner_head_scores", "entity_gate", "antecedent_attn",
+    # Relation stuff.
+    "candidate_entity_scores", "entity_starts", "entity_ends", "entitiy_scores", "num_entities",
+    "rel_labels", "rel_scores",
+]
 
 class DocumentDataset(data.Dataset):
     def __init__(self, config):
@@ -34,18 +35,19 @@ class DocumentDataset(data.Dataset):
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
         self.ner_labels = {l: i for i, l in enumerate([""] + config["ner_labels"])}
+        self.ner_labels_inv = [""] + config["ner_labels"]
 
         self.input_names = _input_names
         self.label_names = _label_names
-        # self.predict_names = _predict_names
+        self.predict_names = _predict_names
 
         # Fields declaration
         self.fields = [
-            ("tokens", data.RawField()), # TODO is sequential ok?
+            ("tokens", data.RawField()),
             ("context_word_emb", data.RawField()),
             ("head_word_emb", data.RawField()),
             ("lm_emb", data.RawField()),
-            ("char_idx", data.RawField()), # TODO sequential?
+            ("char_idx", data.RawField()),
             ("text_len", data.RawField()),
             ("doc_id", data.RawField()),
             ("doc_key", data.RawField()),
@@ -82,6 +84,7 @@ class DocumentDataset(data.Dataset):
 
         self.char_embedding_size = config["char_embedding_size"]
         self.char_dict = data_utils.load_char_dict(config["char_vocab_path"])
+        self.dict_size = len(self.char_dict)
         self.examples = []
         self._load_data()
 
@@ -98,12 +101,7 @@ class DocumentDataset(data.Dataset):
         return len(ex.text_len)
 
     def _load_data(self):
-        with open(self.config["train_path"], "r", encoding='utf8') as f:
-            train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
-
-        self.populate_sentence_offset(train_examples)
-
-        self._read_documents(train_examples)
+        pass
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
@@ -214,8 +212,6 @@ class DocumentDataset(data.Dataset):
 
         max_word_length = max(max(len(w) for w in sentence), max(self.config["filter_widths"]))
 
-        # TODO convert all numpy into Tensors
-
         # Prepare context word embedding for a sentence
         context_word_emb = torch.zeros([text_len, self.context_embeddings.size])
         head_word_emb = torch.zeros([text_len, self.head_embeddings.size])
@@ -244,8 +240,7 @@ class DocumentDataset(data.Dataset):
             )
         )
 
-        self.examples.append(
-            data.Example.fromlist([
+        example = data.Example.fromlist([
                 # Inputs
                 sentence, # words in sentence (words-in-sent)
                 context_word_emb, # words-in-sent x emb-size
@@ -273,11 +268,14 @@ class DocumentDataset(data.Dataset):
                 len(coref_starts), # mentions
                 len(rel_e1_starts) # relations
             ], self.fields)
-        )
+
+
+        self.examples.append(example)
+
+        return example
 
 
     def fix_batch(self, batch):
-        # TODO all should be converted to tensors
         for field in self.fields:
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
@@ -295,10 +293,24 @@ class DocumentDataset(data.Dataset):
 
         return batch
 
-    def load_eval_data(self):
-        eval_data = []
-        eval_tensors = []
-        coref_eval_data = []
+class TrainDataset(DocumentDataset):
+    def _load_data(self):
+        with open(self.config["train_path"], "r", encoding='utf8') as f:
+            train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+
+        self.populate_sentence_offset(train_examples)
+
+        self._read_documents(train_examples)
+
+class EvalDataset(DocumentDataset):
+    def __init__(self, **kwargs):
+        self.eval_data = None
+        self.coref_eval_data = None
+        super(EvalDataset, self).__init__(**kwargs)
+
+    def _load_data(self):
+        eval_data = {}
+        coref_eval_data = {}
 
         with open(self.config["eval_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
@@ -306,26 +318,25 @@ class DocumentDataset(data.Dataset):
         self.populate_sentence_offset(eval_examples)
 
         for doc_id, document in enumerate(eval_examples,1):
-            doc_tensors = []
             num_mentions_in_doc = 0
 
-            for example in self.split_document_example(document):
+            for example in self._split_document_example(document):
                 # Because each batch=1 document at test time, we do not need to offset cluster ids.
                 example["cluster_id_offset"] = 0
                 example["doc_id"] = doc_id
-                doc_tensors.append(self.tensorize_example(example, is_training=False))
+                self.tensorize_example(example, is_training=False)
                 num_mentions_in_doc += len(example["coref"])
 
             assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
 
-
-            # TODO
-            eval_tensors.append(doc_tensors)
-            eval_data.extend(srl_eval_utils.split_example_for_eval(document))
-            coref_eval_data.append(document)
+            eval_data[doc_id] = data_utils.split_example_for_eval(document)
+            coref_eval_data[doc_id] = document
 
         print("Loaded {} eval examples.".format(len(eval_data)))
-        return eval_data, eval_tensors, coref_eval_data
+        self.eval_data = eval_data
+        self.coref_eval_data = coref_eval_data
+
+
 
 
 

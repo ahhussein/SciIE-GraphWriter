@@ -260,7 +260,7 @@ class NerScores(nn.Module):
 
         ner_loss = torch.sum(torch.masked_select(ner_loss, candidate_mask.view(-1)))
 
-        return flat_ner_scores, ner_loss
+        return ner_scores, ner_loss
 
 
 

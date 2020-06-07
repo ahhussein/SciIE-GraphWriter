@@ -250,7 +250,7 @@ class Model(nn.Module):
 
             if self.config["ner_weight"] > 0:
                 # [num_candidates, num_labels-1]
-                flat_ner_scores, ner_loss = self.ner_scores(
+                ner_scores, ner_loss = self.ner_scores(
                     candidate_span_emb,
                     flat_candidate_entity_scores,
                     candidate_span_ids,
@@ -260,7 +260,7 @@ class Model(nn.Module):
                     candidate_mask
                 )
 
-                predict_dict["ner_scores"] = ner_loss
+                predict_dict["ner_scores"] = ner_scores
 
             loss = (self.config["ner_weight"] * ner_loss + (
                             self.config["coref_weight"] * coref_loss + self.config["relation_weight"] * rel_loss

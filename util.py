@@ -4,7 +4,17 @@ import errno
 import torch
 import span_prune_cpp
 import sys
+import codecs
+import subprocess
 import math
+from sklearn.metrics import classification_report, precision_recall_fscore_support
+
+from pip._vendor.requests.models import CONTENT_CHUNK_SIZE, Response
+
+from pip._internal.utils.typing import MYPY_CHECK_RUNNING
+
+if MYPY_CHECK_RUNNING:
+    from typing import Iterator
 
 def get_config(filename):
     return pyhocon.ConfigFactory.parse_file(filename)
@@ -195,6 +205,192 @@ def bucket_distance(distances):
   return torch.min(combined_idx, torch.tensor(9))
 
 
+def response_chunks(response, chunk_size=CONTENT_CHUNK_SIZE):
+    # type: (Response, int) -> Iterator[bytes]
+    """Given a requests Response, provide the data chunks.
+    """
+    try:
+        # Special case for urllib3.
+        for chunk in response.raw.stream(
+            chunk_size,
+            # We use decode_content=False here because we don't
+            # want urllib3 to mess with the raw bytes we get
+            # from the server. If we decompress inside of
+            # urllib3 then we cannot verify the checksum
+            # because the checksum will be of the compressed
+            # file. This breakage will only occur if the
+            # server adds a Content-Encoding header, which
+            # depends on how the server was configured:
+            # - Some servers will notice that the file isn't a
+            #   compressible file and will leave the file alone
+            #   and with an empty Content-Encoding
+            # - Some servers will notice that the file is
+            #   already compressed and will leave the file
+            #   alone and will add a Content-Encoding: gzip
+            #   header
+            # - Some servers won't notice anything at all and
+            #   will take a file that's already been compressed
+            #   and compress it again and set the
+            #   Content-Encoding: gzip header
+            #
+            # By setting this not to decode automatically we
+            # hope to eliminate problems with the second case.
+            decode_content=False,
+        ):
+            yield chunk
+    except AttributeError:
+        # Standard file-like object.
+        while True:
+            chunk = response.raw.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+def _print_f1(total_gold, total_predicted, total_matched, message=""):
+  precision = 100.0 * total_matched / total_predicted if total_predicted > 0 else 0
+  recall = 100.0 * total_matched / total_gold if total_gold > 0 else 0
+  f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
+  print ("{}: Precision: {}, Recall: {}, F1: {}".format(message, precision, recall, f1))
+  return precision, recall, f1
+
+
+def span_metric(grelations, prelations):
+    g_spans = []
+    p_spans = []
+    res_gold = []
+    res_pred = []
+    for rel in grelations:
+        if 'REVERSE' in rel[1]:
+            span = rel[0][1] + '_' + rel[0][0]
+            g_spans.append(span)
+        else:
+            g_spans.append('_'.join(rel[0]))
+        res_gold.append(rel[1])
+
+    for rel in prelations:
+        if 'REVERSE' in rel[1]:
+            span = rel[0][1] + '_' + rel[0][0]
+            p_spans.append(span)
+        else:
+            p_spans.append('_'.join(rel[0]))
+        res_pred.append(rel[1])
+
+    spans_all = set(p_spans + g_spans)
+    res_all_gold = []
+    res_all_pred = []
+    targets = set()
+    for i, r in enumerate(spans_all):
+        if r in g_spans:
+            target = res_gold[g_spans.index(r)].split("_")[0]
+            res_all_gold.append(target)
+            targets.add(target)
+        else:
+            res_all_gold.append('None')
+        if r in p_spans:
+            target = res_pred[p_spans.index(r)].split("_")[0]
+            res_all_pred.append(target)
+            targets.add(target)
+        else:
+            res_all_pred.append('None')
+    targets = list(targets)
+    prec, recall, f1, support = precision_recall_fscore_support(res_all_gold, res_all_pred, labels=targets,
+                                                                average=None)
+    metrics = {}
+    metrics = {}
+    for k, target in enumerate(targets):
+        metrics[target] = {
+            'precision': prec[k],
+            'recall': recall[k],
+            'f1-score': f1[k],
+            'support': support[k]
+        }
+    prec, recall, f1, s = precision_recall_fscore_support(res_all_gold, res_all_pred, labels=targets, average='micro')
+
+    metrics['overall'] = {
+        'precision': prec,
+        'recall': recall,
+        'f1-score': f1,
+        'support': sum(support)
+    }
+    # print_report(metrics, targets)
+    return prec, recall, f1
+
+
+def print_report(metrics, targets, digits=2):
+    def _get_line(results, target, columns):
+        line = [target]
+        for column in columns[:-1]:
+            line.append("{0:0.{1}f}".format(results[column], digits))
+        line.append("%s" % results[columns[-1]])
+        return line
+
+    columns = ['precision', 'recall', 'f1-score', 'support']
+
+    fmt = '%11s' + '%9s' * 4 + '\n'
+    report = [fmt % tuple([''] + columns)]
+    report.append('\n')
+    for target in targets:
+        results = metrics[target]
+        line = _get_line(results, target, columns)
+        report.append(fmt % tuple(line))
+    report.append('\n')
+
+    # overall
+    line = _get_line(metrics['overall'], 'avg / total', columns)
+    report.append(fmt % tuple(line))
+    report.append('\n')
+
+    print(''.join(report))
+
+
+def print_to_iob2(sentences, gold_ner, pred_ner, gold_file_path):
+  """Print to IOB2 format for NER eval.
+  """
+  # Write NER prediction to IOB format.
+  temp_file_path = "/tmp/ner_pred_%d.tmp" % os.getpid()
+  # Read IOB tags from preprocessed gold path.
+  gold_info = [[]]
+
+  if gold_file_path:
+    fgold = codecs.open(gold_file_path, "r", "utf-8")
+    for line in fgold:
+      line = line.strip()
+      if not line:
+        gold_info.append([])
+      else:
+        gold_info[-1].append(line.split())
+  else:
+    fgold = None
+
+  fout = codecs.open(temp_file_path, "w", "utf-8")
+
+  for sent_id, words in enumerate(sentences):
+    pred_tags = ["O" for _ in words]
+    for start, end, label in pred_ner[sent_id]:
+      pred_tags[start] = "B-" + label
+      for k in range(start + 1, end + 1):
+        pred_tags[k] = "I-" + label
+
+    if not fgold:
+      gold_tags = ["O" for _ in words]
+      for start, end, label in gold_ner[sent_id]:
+        gold_tags[start] = "B-" + label
+        for k in range(start + 1, end + 1):
+          gold_tags[k] = "I-" + label
+    else:
+      assert len(gold_info[sent_id]) == len(words)
+      gold_tags = [t[1] for t in gold_info[sent_id]]
+
+    for w, gt, pt in list(zip(words, gold_tags, pred_tags)):
+      fout.write(w + " " + gt + " " + pt + "\n")
+
+    fout.write("\n")
+
+  fout.close()
+  child = subprocess.Popen('./ner/bin/conlleval < {}'.format(temp_file_path),
+                           shell=True, stdout=subprocess.PIPE)
+  eval_info = child.communicate()[0]
+  print(eval_info)
 
 def print_range(text, i, j):
     while i <= j:

@@ -3,7 +3,7 @@ import os
 import util
 import data_utils
 from torchtext import data
-from document_dataset import DocumentDataset
+from document_dataset import TrainDataset
 from models.model import Model
 import torch
 import span_prune_cpp
@@ -26,7 +26,7 @@ def main():
     util.set_gpus(0)
 
     # TODO test data set
-    dataset = DocumentDataset(config)
+    dataset = TrainDataset(config)
 
     # TODO is training
     model = Model(config, dataset)
@@ -35,12 +35,14 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=config["decay_rate"])
 
+    #TODO test
+    report_frequency = 1
     for epoch in range(20):
         predict_dict, loss = train(model, dataset, config, optimizer)
 
         if epoch % report_frequency == 0:
             print(epoch+1, loss)
-            torch.save(model.state_dict(), config['log_dir'])
+            torch.save(model.state_dict(), f"{config['log_dir']}/model__{epoch+1}")
 
         scheduler.step()
 

@@ -16,10 +16,12 @@ class CharEmbeddings(nn.Module):
                 )
             )
 
-        emb = torch.empty(len(data.char_dict), data.char_embedding_size)
+        emb = torch.empty(data.dict_size, data.char_embedding_size)
+
         nn.init.xavier_uniform_(emb)
         self.relu = nn.ReLU()  # [num_words, num_chars - filter_size, num_filters]
         self.embeddings = nn.Parameter(emb)
+        print(self.embeddings.shape)
 
     def forward(self, char_index):
         # number-sentences x max-sentence-length x max-word-length (over all sentences)

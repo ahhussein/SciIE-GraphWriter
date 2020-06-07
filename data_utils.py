@@ -2,6 +2,8 @@ import numpy as np
 import collections
 import torch
 import util
+import operator
+
 
 
 class EmbeddingDictionary(object):
@@ -103,7 +105,7 @@ def load_char_dict(char_vocab_path):
     vocab = [u"<unk>"]
     with open(char_vocab_path) as f:
         vocab.extend(c.rstrip("\n") for c in f.readlines())
-
+    f.close()
     char_dict = collections.defaultdict(int)
     char_dict.update({c: i for i, c in enumerate(vocab)})
 
@@ -334,3 +336,178 @@ def get_coref_softmax_loss(antecedent_scores, antecedent_labels):
     marginalized_gold_scores = torch.logsumexp(gold_scores, [1])  # [k]
     log_norm = torch.logsumexp(antecedent_scores, [1])  # [k]
     return log_norm - marginalized_gold_scores  # [k]
+
+
+def split_example_for_eval(example):
+  """Split document-based samples into sentence-based samples for evaluation.
+
+  Args:
+    example:
+  Returns:
+    Tuple of (sentence, list of SRL relations)
+  """
+  sentences = example["sentences"]
+
+  if "srl" not in example:
+    example["srl"] = [[] for s in sentences]
+
+  if "relations" not in example:
+    example["relations"] = [[] for s in sentences]
+
+  word_offset = 0
+  samples = []
+
+  for i, sentence in enumerate(sentences):
+    srl_rels = {}
+    ner_spans = []
+    relations = []
+
+    for r in example["srl"][i]:
+      pred_id = r[0] - word_offset
+      if pred_id not in srl_rels:
+        srl_rels[pred_id] = []
+      srl_rels[pred_id].append((r[1] - word_offset, r[2] - word_offset, r[3]))
+
+    for r in example["ner"][i]:
+      ner_spans.append((r[0] - word_offset, r[1] - word_offset, r[2]))
+
+    for r in example["relations"][i]:
+      relations.append((r[0] - word_offset, r[1] - word_offset, r[2] - word_offset,
+                        r[3] - word_offset, r[4]))
+    samples.append((sentence, srl_rels, ner_spans, relations))
+    word_offset += len(sentence)
+
+  return samples
+
+class RetrievalEvaluator(object):
+  def __init__(self):
+    self._num_correct = 0
+    self._num_gold = 0
+    self._num_predicted = 0
+
+  def update(self, gold_set, predicted_set):
+    self._num_correct += len(gold_set & predicted_set)
+    self._num_gold += len(gold_set)
+    self._num_predicted += len(predicted_set)
+
+  def recall(self):
+    return maybe_divide(self._num_correct, self._num_gold)
+
+  def precision(self):
+    return maybe_divide(self._num_correct, self._num_predicted)
+
+  def metrics(self):
+    recall = self.recall()
+    precision = self.precision()
+    f1 = maybe_divide(2 * recall * precision, precision + recall)
+    return recall, precision, f1
+
+def maybe_divide(x, y):
+  return 0 if y == 0 else x / float(y)
+
+def evaluate_retrieval(span_starts, span_ends, span_scores, pred_starts, pred_ends, gold_spans,
+                       text_length, evaluators, debugging=False):
+  """
+  Evaluation for unlabeled retrieval.
+
+  Args:
+    gold_spans: Set of tuples of (start, end).
+  """
+  if len(span_starts) > 0:
+    sorted_starts, sorted_ends, sorted_scores = zip(*sorted(
+        list(zip(span_starts, span_ends, span_scores)),
+        key=operator.itemgetter(2), reverse=True))
+  else:
+    sorted_starts = []
+    sorted_ends = []
+  for k, evaluator in evaluators.items():
+    if k == -3:
+      predicted_spans = set(zip(span_starts, span_ends)) & gold_spans
+    else:
+      if k == -2:
+        predicted_starts = pred_starts
+        predicted_ends = pred_ends
+        if debugging:
+          print("Predicted", list(zip(sorted_starts, sorted_ends, sorted_scores))[:len(gold_spans)])
+          print("Gold", gold_spans)
+     # FIXME: scalar index error
+      elif k == 0:
+        is_predicted = span_scores > 0
+        predicted_starts = span_starts[is_predicted]
+        predicted_ends = span_ends[is_predicted]
+      else:
+        if k == -1:
+          num_predictions = len(gold_spans)
+        else:
+          num_predictions = int((k * text_length) / 100)
+
+
+        predicted_starts = sorted_starts[:num_predictions]
+        predicted_ends = sorted_ends[:num_predictions]
+      predicted_spans = set(zip(predicted_starts, predicted_ends))
+    evaluator.update(gold_set=gold_spans, predicted_set=predicted_spans)
+
+
+def compute_relation_f1(gold_rels, predictions):
+    assert len(gold_rels) == len(predictions)
+
+    total_gold = 0
+    total_predicted = 0
+    total_matched = 0
+    total_unlabeled_matched = 0
+    # Compute unofficial F1 of entity relations.
+    doc_id = 0  # Actually sentence id.
+    gold_tuples = []  # For official eval.
+    predicted_tuples = []
+
+    for gold, prediction in list(zip(gold_rels, predictions)):
+        total_gold += len(gold)
+        total_predicted += len(prediction)
+        for g in gold:
+            gold_tuples.append([["d{}_{}_{}".format(doc_id, g[0], g[1]),
+                                 "d{}_{}_{}".format(doc_id, g[2], g[3])], g[4]])
+            for p in prediction:
+                if g[0] == p[0] and g[1] == p[1] and g[2] == p[2] and g[3] == p[3]:
+                    total_unlabeled_matched += 1
+                    if g[4] == p[4]:
+                        total_matched += 1
+                    break
+
+        for p in prediction:
+            predicted_tuples.append([["d{}_{}_{}".format(doc_id, p[0], p[1]),
+                                      "d{}_{}_{}".format(doc_id, p[2], p[3])], p[4]])
+        doc_id += 1
+
+    precision, recall, f1 = util._print_f1(total_gold, total_predicted, total_matched, "Relations (unofficial)")
+    util._print_f1(total_gold, total_predicted, total_unlabeled_matched,
+                                          "Unlabeled (unofficial)")
+    util.span_metric(gold_tuples, predicted_tuples)
+    return precision, recall, f1
+
+
+def compute_span_f1(gold_data, predictions, task_name):
+  assert len(gold_data) == len(predictions)
+  total_gold = 0
+  total_predicted = 0
+  total_matched = 0
+  total_unlabeled_matched = 0
+  label_confusions = collections.Counter()  # Counter of (gold, pred) label pairs.
+
+  for i in range(len(gold_data)):
+    gold = gold_data[i]
+    pred = predictions[i]
+    total_gold += len(gold)
+    total_predicted += len(pred)
+
+    for a0 in gold:
+      for a1 in pred:
+        if a0[0] == a1[0] and a0[1] == a1[1]:
+          total_unlabeled_matched += 1
+          label_confusions.update([(a0[2], a1[2]),])
+          if a0[2] == a1[2]:
+            total_matched += 1
+
+  prec, recall, f1 = util._print_f1(total_gold, total_predicted, total_matched, task_name)
+  ul_prec, ul_recall, ul_f1 = util._print_f1(total_gold, total_predicted, total_unlabeled_matched, "Unlabeled " + task_name)
+  return prec, recall, f1, ul_prec, ul_recall, ul_f1, label_confusions
+

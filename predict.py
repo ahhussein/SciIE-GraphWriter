@@ -1,14 +1,13 @@
 import sys
 import os
 import util
-import data_utils
-from torchtext import data
 from document_dataset import EvalDataset
 from models.model import Model
 import torch
-import span_prune_cpp
-#from evaluator import Evaluator
+from evaluator import Evaluator
 from eval_iter import EvalIterator
+
+
 
 def main():
     # ds = dataset(args)
@@ -21,9 +20,9 @@ def main():
         print(f"Running experiment: {name} (from local variable).")
 
     config = util.get_config("experiments.conf")[name]
-    report_frequency = config["report_frequency"]
 
     config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
+    print(config['output_path'])
 
     # Dynamic batch size.
     config["batch_size"] = -1
@@ -34,28 +33,32 @@ def main():
         config["lm_path"] = config["lm_path_dev"]
 
     # TODO test data set
-    dataset = EvalDataset(config)
+    dataset = EvalDataset(config=config)
 
     # TODO is training model eval
     model = Model(config, dataset)
 
-    #evaluator = Evaluator(config)
+    evaluator = Evaluator(config, dataset, model)
 
     # TODO log
     log_dir = config["log_dir"]
 
-    max_f1 = 0
-    best_task_f1 = {}
+    model.load_state_dict(torch.load(f"{log_dir}/model__1"))
 
-    # TODO multiple checkpoints
-    model.load_state_dict(torch.load(log_dir))
-
-    data_iter = EvalIterator(dataset, sort_key=lambda x: len(x['doc_id']), batch_size=100)
+    # Load batch of sentences for each document
+    data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
 
     for count, batch in enumerate(data_iter):
-        #batch = dataset.fix_batch(batch)
-        print(batch.shape)
-        print(batch)
+        doc_batch = dataset.fix_batch(batch)
+        evaluator.evaluate(doc_batch)
+        if (count + 1) % 50 == 0:
+            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+    evaluator.write_out()
+    # Move to evaualtor
+    # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()
+    # print(summary_dict)
+    # print(main_metric)
+    # print(task_to_f1)
 
 
 
