@@ -22,7 +22,6 @@ def main():
     config = util.get_config("experiments.conf")[name]
 
     config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
-    print(config['output_path'])
 
     # Dynamic batch size.
     config["batch_size"] = -1

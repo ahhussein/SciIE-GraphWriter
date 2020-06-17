@@ -218,10 +218,13 @@ def get_span_candidates(text_len, max_sentence_len, max_mention_width):
 
 
 def get_span_task_labels(arg_starts, arg_ends, batch, max_sentence_length):
-    """Get dense labels for NER/Constituents (unary span prediction tasks).
+    """
+        Get dense labels for NER/Constituents (unary span prediction tasks).
+        return  Tensor [num_sentences, max_num_candidates] and each candidate gets the true label (ner/clusterId)
     """
     num_sentences = arg_starts.shape[0]
     max_num_args = arg_starts.shape[1]
+
     # [num_sentences, max_num_args]
     sentence_indices = torch.arange(num_sentences).unsqueeze(1).repeat([1, max_num_args])
 
@@ -234,14 +237,15 @@ def get_span_task_labels(arg_starts, arg_ends, batch, max_sentence_length):
 
     dense_ner_labels = get_dense_span_labels(
         batch.ner_starts, batch.ner_ends, batch.ner_labels, batch.ner_len,
-        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len]
+        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len] -> ner label
 
     dense_coref_labels = get_dense_span_labels(
         batch.coref_starts, batch.coref_ends, batch.coref_cluster_ids, batch.coref_len,
-        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len]
+        max_sentence_length)  # [num_sentences, max_sent_len, max_sent_len] -> cluster id
 
     ner_labels = gather_nd(dense_ner_labels, pred_indices)  # [num_sentences, max_num_args]
     coref_cluster_ids = gather_nd(dense_coref_labels, pred_indices)  # [num_sentences, max_num_args]
+
     return ner_labels, coref_cluster_ids
 
 
@@ -260,6 +264,7 @@ def get_dense_span_labels(span_starts, span_ends, span_labels, num_spans, max_se
 
     # For padded spans, we have starts = 1, and ends = 0, so they don't collide with any existing spans.
     span_starts += (1 - util.sequence_mask(num_spans, dtype=torch.int32))  # [num_sentences, max_num_spans]
+
     sentences_indices = torch.arange(num_sentences).unsqueeze(1).repeat(
         [1, max_num_spans])  # [num_sentences, max_num_spans]
 
@@ -270,7 +275,7 @@ def get_dense_span_labels(span_starts, span_ends, span_labels, num_spans, max_se
     ], 2)  # [num_sentences, max_num_spans, 3]
 
     if span_parents is not None:
-        # [num_sentenes, max_num_spans, 4]
+        # [num_sentences, max_num_spans, 4]
         sparse_indices = torch.cat([sparse_indices, span_parents.unsqueeze(2)], 2)
 
     rank = 3 if (span_parents is None) else 4
@@ -318,16 +323,28 @@ def gather_nd(params, indices):
 def get_relation_labels(entity_starts, entity_ends, num_entities, max_sentence_length,
                         gold_e1_starts, gold_e1_ends, gold_e2_starts, gold_e2_ends,
                         gold_labels, num_gold_rels):
+    """
+    entity_starts: the top selected entity span starts  [num_sentences x max_selected_spans]
+    entity_end:    the top selected entity spans ends   [num_sentences x max_selected_spans]
+    num_entities:  the topk calculated by max(ratio*sentence_len, 1)
+    """
     num_sentences, max_num_ents = entity_starts.shape
+    # represents (sentence index, entity start, entity end)
     rel_labels = torch.zeros([num_sentences, max_num_ents + 1, max_num_ents + 1], dtype=torch.int64)
+
+    # full span of the above representation
     entity_ids = torch.zeros([num_sentences, max_sentence_length, max_sentence_length], dtype=torch.int64)
 
     for i in range(num_sentences):
         for j in range(num_entities[i]):
             entity_ids[i, entity_starts[i, j], entity_ends[i, j]] = j + 1
         for j in range(num_gold_rels[i]):
-            rel_labels[i, entity_ids[i, gold_e1_starts[i, j], gold_e1_ends[i, j]],
-                       entity_ids[i, gold_e2_starts[i, j], gold_e2_ends[i, j]]] = gold_labels[i, j]
+            rel_labels[
+                i,
+                entity_ids[i, gold_e1_starts[i, j], gold_e1_ends[i, j]],
+                entity_ids[i, gold_e2_starts[i, j], gold_e2_ends[i, j]]
+            ] = gold_labels[i, j]
+
     return rel_labels[:, 1:, 1:]  # Remove "dummy" entities.
 
 

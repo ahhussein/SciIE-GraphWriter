@@ -8,6 +8,7 @@ class SpanEmbeddings(nn.Module):
         self.config = config
         self.data = data
 
+        # Embeddings for span widths
         emb = torch.empty(self.config['max_arg_width'], self.config['feature_size'])
         nn.init.xavier_uniform_(emb)
         self.embeddings = nn.Parameter(emb)
@@ -32,9 +33,9 @@ class SpanEmbeddings(nn.Module):
         """
         text_length = context_outputs.shape[0]
 
-        # [num_words, emb]
+        # [num_candidates, emb]
         span_start_emb = context_outputs[span_starts]
-        # [num_words, emb]
+        # [num_candidates, emb]
         span_end_emb = context_outputs[span_ends]
         span_emb_list = [span_start_emb, span_end_emb]
 
@@ -114,6 +115,7 @@ class UnaryScores(nn.Module):
         torch.nn.init.xavier_uniform_(self.output.weight)
 
     def forward(self, candidate_span_emb):
+        # candidate_span_emb = [num-candidates, emb]
         x = self.output(
             self.hidden1(
                 self.input(candidate_span_emb)
@@ -122,7 +124,7 @@ class UnaryScores(nn.Module):
 
         scores = self.dropout(x)
 
-        # [num_sentences, num_spans] or [k]
+        # [num-candidates] or [k]
         return torch.squeeze(scores)
 
 
@@ -132,7 +134,7 @@ class RelScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            3810, #TODO
+            1270 * 3, #TODO
             self.config["ffnn_size"]
         )
 
@@ -161,7 +163,6 @@ class RelScores(nn.Module):
         e2_emb_expanded = entity_emb.unsqueeze(1)  # [num_sents, 1, num_ents, emb]
         e1_emb_tiled = e1_emb_expanded.repeat([1, 1, num_entities, 1])  # [num_sents, num_ents, num_ents, emb]
         e2_emb_tiled = e2_emb_expanded.repeat([1, num_entities, 1, 1])  # [num_sents, num_ents, num_ents, emb]
-
         similarity_emb = e1_emb_expanded * e2_emb_expanded  # [num_sents, num_ents, num_ents, emb]
         pair_emb_list = [e1_emb_tiled, e2_emb_tiled, similarity_emb]
         pair_emb = torch.cat(pair_emb_list, 3)  # [num_sentences, num_ents, num_ents, emb]
@@ -176,11 +177,11 @@ class RelScores(nn.Module):
 
         scores = self.dropout(x)
 
-        # [num_sentences * num_ents * num_ents, 1]
+        # [num_sentences * num_ents * num_ents, num_labels]
         flat_rel_scores = torch.squeeze(scores)
 
         rel_scores = flat_rel_scores.view([num_sentences, num_entities, num_entities, self.num_labels - 1])
-        # [num_sentences, ents, max_num_ents, num_labels-1]
+        # [num_sentences, max_num_ents, max_num_ents, num_labels-1]
         rel_scores += entity_scores.unsqueeze(2).unsqueeze(3) + entity_scores.unsqueeze(1).unsqueeze(3)
 
         dummy_scores = torch.zeros([num_sentences, num_entities, num_entities, 1], dtype=torch.float32)
@@ -196,8 +197,6 @@ class RelScores(nn.Module):
             &
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
-
-        torch.set_printoptions(profile="full")
 
         loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
 
@@ -242,6 +241,7 @@ class NerScores(nn.Module):
             )
         )
 
+        # num-cand, num-labels
         flat_ner_scores = torch.squeeze(self.dropout(x))
 
         if self.config["span_score_weight"] > 0:

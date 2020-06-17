@@ -1,5 +1,4 @@
 from torch import nn
-import torch
 
 class LSTMContextualize(nn.Module):
     def __init__(self, config, data, is_training=1):

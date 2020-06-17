@@ -21,7 +21,6 @@ class CharEmbeddings(nn.Module):
         nn.init.xavier_uniform_(emb)
         self.relu = nn.ReLU()  # [num_words, num_chars - filter_size, num_filters]
         self.embeddings = nn.Parameter(emb)
-        print(self.embeddings.shape)
 
     def forward(self, char_index):
         # number-sentences x max-sentence-length x max-word-length (over all sentences)
@@ -40,6 +39,7 @@ class CharEmbeddings(nn.Module):
             conv, indices = torch.max(self.relu(cnn(flattened_char_emb)), 2)
             outputs.append(conv)
         concatenated = torch.cat(outputs, 1) #[num-words, num-filters * len(filter-sizes)]
+
         return concatenated.view(num_sentences, max_sentence_length, -1) # [num_sentences, max_sentence_length, emb]
 
 

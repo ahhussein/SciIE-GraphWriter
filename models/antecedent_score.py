@@ -37,34 +37,39 @@ class AntecedentScore(nn.Module):
         feature_emb_list = []
 
         if self.config["use_features"]:
-            target_indices = torch.arange(k)  # [k]
-            antecedent_distance = target_indices.unsqueeze(1) - antecedents # [k, max_ant]
+            antecedent_distance = torch.arange(k).unsqueeze(1) - antecedents # [k, max_ant]
+
             antecedent_distance_buckets = util.bucket_distance(antecedent_distance)  # [k, max_ant]
 
             # TODO variable reuse with tf.variable_scope("features", reuse=reuse):
-            antecedent_distance_emb = self.antecedent_distance_emb[antecedent_distance_buckets] # [k, max_ant]
+            antecedent_distance_emb = self.antecedent_distance_emb[antecedent_distance_buckets] # [k, max_ant, emb]
             feature_emb_list.append(antecedent_distance_emb)
 
-            feature_emb = self.dropout(torch.cat(feature_emb_list, 2)) # [k, max_ant, emb]
+        feature_emb = self.dropout(torch.cat(feature_emb_list, 2)) # [k, max_ant, emb]
 
-            antecedent_emb = top_span_emb[antecedents]  # [k, max_ant, emb]
-            target_emb = top_span_emb.unsqueeze(1)  # [k, 1, emb]
-            similarity_emb = antecedent_emb * target_emb  # [k, max_ant, emb]
-            target_emb = target_emb.repeat([1, max_antecedents, 1])  # [k, max_ant, emb]
-            pair_emb = torch.cat([target_emb, antecedent_emb, similarity_emb, feature_emb], 2)  # [k, max_ant, emb]
 
-            #with tf.variable_scope("antecedent_scores", reuse=reuse):
-            x = self.output(
-                self.hidden1(
-                    self.input(pair_emb)
-                )
+        # mentions are included in the mention_scores array since that array gives a score
+        # of the possibility of having that span referenced as a mention
+        antecedent_emb = top_span_emb[antecedents]  # [k, max_ant, emb]
+        target_emb = top_span_emb.unsqueeze(1)  # [k, 1, emb]
+        # all antecdents to be multiplied by the proform
+        similarity_emb = antecedent_emb * target_emb  # [k, max_ant, emb]
+        target_emb = target_emb.repeat([1, max_antecedents, 1])  # [k, max_ant, emb]
+        pair_emb = torch.cat([target_emb, antecedent_emb, similarity_emb, feature_emb], 2)  # [k, max_ant, emb]
+
+        #with tf.variable_scope("antecedent_scores", reuse=reuse):
+        x = self.output(
+            self.hidden1(
+                self.input(pair_emb)
             )
+        )
 
-            antecedent_scores = self.dropout(x) # [k, max_ant, 1]
-            antecedent_scores = torch.squeeze(antecedent_scores, 2)  # [k, max_ant]
-            # [k, max_ant]
-            antecedent_scores += top_span_mention_scores.unsqueeze(1) + top_span_mention_scores[antecedents]
-            return antecedent_scores, antecedent_emb, pair_emb  # [k, max_ant]
+        antecedent_scores = self.dropout(x) # [k, max_ant, 1]
+        antecedent_scores = torch.squeeze(antecedent_scores, 2)  # [k, max_ant]
+        # [k, max_ant]
+        # Add to score the score of the corresponding proform
+        antecedent_scores += top_span_mention_scores.unsqueeze(1) + top_span_mention_scores[antecedents]
+        return antecedent_scores, antecedent_emb, pair_emb  # [k, max_ant]
 
 
 

@@ -65,7 +65,8 @@ class DocumentDataset(data.Dataset):
             ("rel_labels", data.RawField()),
             ("ner_len", data.RawField()),
             ("coref_len", data.RawField()),
-            ("rel_len", data.RawField())
+            ("rel_len", data.RawField()),
+            ("title", data.RawField())
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
@@ -116,19 +117,21 @@ class DocumentDataset(data.Dataset):
 
             # Read sentences in a document
             for example in self._split_document_example(document):
+                # append further attributes to sent in a document
                 example["doc_id"] = doc_id
                 example["cluster_id_offset"] = cluster_id_offset
                 doc_examples[-1].append(example)
                 num_mentions += len(example["coref"])
+
             cluster_id_offset += len(document["clusters"])
             num_sentences += len(doc_examples[-1])
 
         print("Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
             doc_id, num_sentences, cluster_id_offset, num_mentions))
 
-        for example_sentences in doc_examples:
+        for doc_sentences in doc_examples:
             # TODO is_training should be class-level dynamic
-            [self.tensorize_example(example, is_training=True) for example in example_sentences]
+            [self.tensorize_example(doc_sentence, is_training=True) for doc_sentence in doc_sentences]
 
     def _split_document_example(self, example):
         """
@@ -165,6 +168,7 @@ class DocumentDataset(data.Dataset):
                 "coref": coref_mentions,
                 "word_offset": word_offset, # Sentence offset in the document
                 "doc_key": example["doc_key"],
+                "title": '', # TODO title
                 "sent_offset": example["sent_offset"]  # Sentence offset for the same doc ID.
             }
             word_offset += text_len
@@ -216,6 +220,7 @@ class DocumentDataset(data.Dataset):
         context_word_emb = torch.zeros([text_len, self.context_embeddings.size])
         head_word_emb = torch.zeros([text_len, self.head_embeddings.size])
         char_index = torch.zeros([text_len, max_word_length], dtype=torch.long)
+
         for j, word in enumerate(sentence):
             context_word_emb[j] = self.context_embeddings[word]
             head_word_emb[j] = self.head_embeddings[word]
@@ -266,7 +271,8 @@ class DocumentDataset(data.Dataset):
                 rel_labels, # e.g. "conjunction"
                 len(ner_starts), # entities
                 len(coref_starts), # mentions
-                len(rel_e1_starts) # relations
+                len(rel_e1_starts), # relations,
+                example['title']
             ], self.fields)
 
 
@@ -278,7 +284,7 @@ class DocumentDataset(data.Dataset):
     def fix_batch(self, batch):
         for field in self.fields:
             convert_tensor = True
-            if field in ['tokens', 'doc_key']:
+            if field in ['tokens', 'doc_key', 'title']:
                 convert_tensor = False
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
 

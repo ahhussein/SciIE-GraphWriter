@@ -1,13 +1,10 @@
 import sys
 import os
 import util
-import data_utils
 from torchtext import data
 from document_dataset import TrainDataset
 from models.model import Model
 import torch
-import span_prune_cpp
-
 
 def main():
     # ds = dataset(args)
@@ -21,7 +18,7 @@ def main():
 
     config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
 
-    util.print_config(config)
+    #util.print_config(config)
 
     util.set_gpus(0)
 
@@ -35,13 +32,12 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=config["decay_rate"])
 
-    #TODO test
-    report_frequency = 1
-    for epoch in range(20):
+    # TEST - report_frequency = 10
+    for epoch in range(100):
         predict_dict, loss = train(model, dataset, config, optimizer)
 
         if epoch % report_frequency == 0:
-            print(epoch+1, loss)
+            print(f"epoch: {epoch+1} - loss: {loss}")
             torch.save(model.state_dict(), f"{config['log_dir']}/model__{epoch+1}")
 
         scheduler.step()
@@ -62,7 +58,7 @@ def train(model, dataset, config, optimizer):
 
         predict_dict, loss = model(batch)
 
-        # Zero gradients, perform a backward pass, and update the weights.
+        # Zero gradients, perform a backward pass, and update params.
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

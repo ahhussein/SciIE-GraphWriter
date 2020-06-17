@@ -150,18 +150,11 @@ def get_batch_topk(
         torch.ones(num_sentences, dtype=torch.int32)
     )
 
-    # [num_sentences, max_num_predictions]
-    # print(candidate_scores)
-    # print(candidate_scores.shape)
-    # print(candidate_starts)
-    # print(candidate_starts.shape)
-    # print(candidate_ends)
-    # print(candidate_ends.shape)
-    # print(topk)
-    # print(topk.shape)
-    # print(max_sentence_length)
+    # [num_sentences, pruned_num_candidates = max(topk)]
     min = -sys.maxsize - 1
     candidate_scores[candidate_scores == float('-inf')] = min
+
+    # TODO: go through the pruning algorithm
     predicted_indices = span_prune_cpp.extract_spans(
         candidate_scores,
         candidate_starts,
@@ -173,9 +166,11 @@ def get_batch_topk(
     )
 
     predicted_indices = predicted_indices.type(torch.int64)
-    predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, max_num_predictions]
-    predicted_ends = batch_gather(candidate_ends, predicted_indices)  # [num_sentences, max_num_predictions]
-    predicted_scores = batch_gather(candidate_scores, predicted_indices)  # [num_sentences, max_num_predictions]
+
+    # get corresponding span starts and ends
+    predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, pruned_num_candidates]
+    predicted_ends = batch_gather(candidate_ends, predicted_indices)  # [num_sentences, pruned_num_candidates]
+    predicted_scores = batch_gather(candidate_scores, predicted_indices)  # [num_sentences, pruned_num_candidates]
 
     return predicted_starts, predicted_ends, predicted_scores, topk, predicted_indices
 
