@@ -31,6 +31,7 @@ class SpanEmbeddings(nn.Module):
           span_starts: [num_spans]
           span_ends: [num_spans]
         """
+
         text_length = context_outputs.shape[0]
 
         # [num_candidates, emb]
@@ -55,7 +56,6 @@ class SpanEmbeddings(nn.Module):
         span_indices = None
         span_indices_log_mask = None
 
-        # TODO read literature head embeddings
         if self.config['model_heads']:
             # [num_spans, max_span_width]
             span_indices = torch.min(
@@ -63,6 +63,7 @@ class SpanEmbeddings(nn.Module):
                 torch.tensor([text_length - 1])
             )
 
+            # [num_spans, max_span_width, emb]
             span_text_emb = head_emb[span_indices]
 
             # [num_spans, max_arg_width]
@@ -73,6 +74,8 @@ class SpanEmbeddings(nn.Module):
                     dtype=torch.float32)
             )
 
+            # [num_word, 1]
+            # Attention score per word
             head_scores = self.ffnn(context_outputs)
 
             # [num_spans, max_arg_width, num_heads]

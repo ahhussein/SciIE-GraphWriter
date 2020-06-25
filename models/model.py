@@ -113,7 +113,7 @@ class Model(nn.Module):
             candidate_entity_scores = flat_candidate_entity_scores[candidate_span_ids] + spans_log_mask
 
             # entity_starts = entity_ends = entity_scores(same score as candidate_entity_scores but pruned) = [num_sentences, max_num_ents]
-            # topk = [num_sentences,]
+            # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
@@ -133,6 +133,7 @@ class Model(nn.Module):
         if self.config["coref_weight"] > 0:
             # score mentions
             # [num-candidates]
+            # Score independent from relation pruning
             candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
             doc_ids = batch.doc_id.unsqueeze(1)
 
@@ -235,11 +236,11 @@ class Model(nn.Module):
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
                 # -inf to the padded spans
                 "candidate_entity_scores": candidate_entity_scores,
-                #  the top selected entity span starts  [num_sentences x max_selected_spans]
+                #  the top selected entity span starts  [num_sentences, max_selected_spans]
                 "entity_starts": entity_starts,
-                #  the top selected entity spans ends   [num_sentences x max_selected_spans]
+                #  the top selected entity spans ends   [num_sentences, max_selected_spans]
                 "entity_ends": entity_ends,
-                #  the top selected entity spans score [num_sentences x max_selected_spans]
+                #  the top selected entity spans score [num_sentences, max_selected_spans]
                 "entitiy_scores": entity_scores,
                 # the topk calculated by max(ratio*sentence_len, 1)
                 "num_entities": num_entities,
@@ -285,7 +286,7 @@ class Model(nn.Module):
         dummy_scores = torch.zeros_like(candidate_span_ids, dtype=torch.float32).unsqueeze(2)
 
         if self.config["ner_weight"] > 0:
-            # [num_candidates, num_labels-1]
+            # [num_sentences, max_num_candidates, num_labels-1]
             ner_scores, ner_loss = self.ner_scores(
                 candidate_span_emb,
                 flat_candidate_entity_scores,

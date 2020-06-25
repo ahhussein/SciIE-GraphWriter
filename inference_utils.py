@@ -11,15 +11,16 @@ def mtl_decode(sentences, predict_dict, ner_labels_inv, rel_labels_inv, config):
     # Decode sentence-level tasks.
     num_sentences = len(sentences)
     if "srl_scores" in predict_dict:
-        predictions["srl"] = [{} for i in range(num_sentences)]
+        predictions["srl"] = [{} for _ in range(num_sentences)]
     if "ner_scores" in predict_dict:
-        predictions["ner"] = [{} for i in range(num_sentences)]
+        predictions["ner"] = [{} for _ in range(num_sentences)]
     if "rel_scores" in predict_dict:
-        predictions["rel"] = [[] for i in range(num_sentences)]
+        predictions["rel"] = [[] for _ in range(num_sentences)]
 
     # Sentence-level predictions.
     for i in range(num_sentences):
         if "rel" in predictions:
+            # Num entities per sentence
             num_ents = predict_dict["num_entities"][i]
             ent_starts = predict_dict["entity_starts"][i]
             ent_ends = predict_dict["entity_ends"][i]
@@ -34,6 +35,7 @@ def mtl_decode(sentences, predict_dict, ner_labels_inv, rel_labels_inv, config):
             ner_spans = _dp_decode_non_overlapping_spans(
                 predict_dict["candidate_starts"][i],
                 predict_dict["candidate_ends"][i],
+                # [num_sentences, max_num_candidates, num_labels]
                 predict_dict["ner_scores"][i],
                 len(sentences[i]), ner_labels_inv, None, False)
             predictions["ner"][i] = ner_spans
@@ -89,6 +91,8 @@ def mtl_decode(sentences, predict_dict, ner_labels_inv, rel_labels_inv, config):
 def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, pred_id,
                                      u_constraint=False):
     num_roles = scores.shape[1]
+
+    # Get the pred for each candidate
     labels = torch.argmax(scores, dim=1)
     spans = zip(starts, ends, range(len(starts)))
     spans = sorted(spans, key=lambda x: (x[0], x[1]))
@@ -122,6 +126,8 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
         # Strictly better to incorporate a dummy span if it has the highest local score.
         if r0 == 0:
             continue
+
+        # Consider those with actual label
         r0_str = labels_inv[r0]
         # Enumerate explored states.
         t_states = [t for t in states.keys() if t <= start]
@@ -142,13 +148,14 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
                                 _update_state(t, rs, end + 1, rs | core_state, scores[i][r], i, r)
     # Backtrack to decode.
     new_spans = []
+    new_span_indices = []
     t, rs = best_state[0]
     while (t, rs) in pointers:
         i, r, t0, rs0 = pointers[(t, rs)]
         new_spans.append((starts[i], ends[i], labels_inv[r]))
+        new_span_indices.append(i)
         t = t0
         rs = rs0
-
     # print spans
     # print new_spans[::-1]
-    return new_spans[::-1]
+    return new_spans[::-1], new_span_indices

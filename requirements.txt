@@ -5,3 +5,5 @@ pyhocon
 pybind11
 numpy
 h5py
+dill
+allennlp
