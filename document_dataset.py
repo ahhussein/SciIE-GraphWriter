@@ -66,7 +66,8 @@ class DocumentDataset(data.Dataset):
             ("ner_len", data.RawField()),
             ("coref_len", data.RawField()),
             ("rel_len", data.RawField()),
-            ("title", data.RawField())
+            ("title", data.RawField()),
+            ("doc_len", data.RawField())
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
@@ -130,8 +131,14 @@ class DocumentDataset(data.Dataset):
             doc_id, num_sentences, cluster_id_offset, num_mentions))
 
         for doc_sentences in doc_examples:
+            doc_sentences_processed = []
             # TODO is_training should be class-level dynamic
-            [self.tensorize_example(doc_sentence, is_training=True) for doc_sentence in doc_sentences]
+
+            [doc_sentences_processed.append(self.tensorize_example(doc_sentence, is_training=True)) for doc_sentence in doc_sentences]
+
+            example = data.Example.fromlist((np.stack(np.array(doc_sentences_processed),1).tolist()) + [len(doc_sentences_processed)]  , self.fields)
+
+            self.examples.append(example)
 
     def _split_document_example(self, example):
         """
@@ -245,7 +252,7 @@ class DocumentDataset(data.Dataset):
             )
         )
 
-        example = data.Example.fromlist([
+        return [
                 # Inputs
                 sentence, # words in sentence (words-in-sent)
                 context_word_emb, # words-in-sent x emb-size
@@ -273,12 +280,7 @@ class DocumentDataset(data.Dataset):
                 len(coref_starts), # mentions
                 len(rel_e1_starts), # relations,
                 example['title']
-            ], self.fields)
-
-
-        self.examples.append(example)
-
-        return example
+            ]
 
 
     def fix_batch(self, batch):
@@ -286,8 +288,12 @@ class DocumentDataset(data.Dataset):
             convert_tensor = True
             if field in ['tokens', 'doc_key', 'title']:
                 convert_tensor = False
+            if field == 'doc_len':
+                continue
+
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
 
+        batch.doc_len = torch.tensor(batch.doc_len)
         batch.ner_starts = batch.ner_starts.type(torch.int64)
         batch.ner_ends = batch.ner_ends.type(torch.int64)
         batch.coref_starts = batch.coref_starts.type(torch.int64)

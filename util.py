@@ -106,6 +106,7 @@ def flatten_emb(emb):
         flattened_emb = emb.reshape(num_sentences * max_sentence_length, -1)
     else:
         raise ValueError("Unsupported rank: {}".format(emb_rank))
+        raise ValueError("Unsupported rank: {}".format(emb_rank))
 
     return flattened_emb
 
@@ -166,10 +167,10 @@ def get_batch_topk(
     )
 
     predicted_indices = predicted_indices.type(torch.int64)
-
     # get corresponding span starts and ends
     predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, pruned_num_candidates]
     predicted_ends = batch_gather(candidate_ends, predicted_indices)  # [num_sentences, pruned_num_candidates]
+
     predicted_scores = batch_gather(candidate_scores, predicted_indices)  # [num_sentences, pruned_num_candidates]
 
     return predicted_starts, predicted_ends, predicted_scores, topk, predicted_indices

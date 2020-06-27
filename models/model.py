@@ -29,7 +29,7 @@ class Model(nn.Module):
         # head_emb    = [num_sentences, max_sentence_length, emb2]
         context_emb, head_emb, lm_weights, lm_scaling = self.embeddings(batch)
 
-        # [max-num_sentences, max-sentence-length, num-dir=2 * hz]
+        # [num_sentences, max-sentence-length, num-dir=2 * hz]
         context_outputs = self.lstm(context_emb)
 
         # [num_sentences, max_mention_width * max_sentence_length]
@@ -41,11 +41,13 @@ class Model(nn.Module):
 
         flat_candidate_mask = candidate_mask.view(-1) # [num_sentences * max_mention_width * max_sentence_length]
 
-        # Perform exclusive cum sum # TODO assuming this is one document?!
+        # Perform exclusive cum sum
         batch_word_offset = torch.cumsum(batch.text_len, 0).roll(1).unsqueeze(1)
         batch_word_offset[0] = 0 # [num_sentences, 1]
 
         # broadcast offset shifting to all sentences, and apply mask select
+        # Sentence shifting will ensure that the word gets matched to the corresponding
+        # embedding in the `flat_context_emb` and `flat_head_emb`
         # [num_candidates]
         flat_candidate_starts = torch.masked_select(
             (candidate_starts + batch_word_offset).view(-1),
@@ -61,13 +63,13 @@ class Model(nn.Module):
         # [num_sentences, max_sentence_length]
         text_len_mask = util.sequence_mask(batch.text_len, max_sentence_length)
 
-        # [num_words = num-candidates, emb], padding removed
+        # [num_words, emb], padding removed
         flat_context_emb = util.flatten_emb_by_sentence(context_outputs, text_len_mask)
 
         # [num_words, emb]
         flat_head_emb = util.flatten_emb_by_sentence(head_emb, text_len_mask)
 
-        # TODO ensure that sample are not cross documents
+        # TODO will that be effected if doc_len is longer?
         # doc len in terms of words in document
         doc_len = flat_context_emb.shape[0]
 
@@ -81,7 +83,6 @@ class Model(nn.Module):
             flat_candidate_ends
         )
 
-        num_candidates = candidate_span_emb.shape[0]
         max_num_candidates_per_sentence = candidate_mask.shape[1]
 
         predict_dict = {
@@ -120,8 +121,6 @@ class Model(nn.Module):
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
 
-
-
             # [num_sentences, max_num_ents]
             # absolute indices (offset added)
             entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
@@ -147,6 +146,7 @@ class Model(nn.Module):
 
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
+            # TODO does the doc_len affect the calculations
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -188,7 +188,6 @@ class Model(nn.Module):
             raw_antecedents = target_indices - antecedent_offsets  # [k, max_ant]
             antecedents = torch.max(raw_antecedents, torch.tensor(0))  # [k, max_ant]
             target_doc_ids = mention_doc_ids.unsqueeze(1)  # [k, 1]
-
             antecedent_doc_ids = mention_doc_ids[antecedents]  # [k, max_ant]
 
             # antecedent has to be greater than 0 and has to belong to the same document
@@ -225,6 +224,7 @@ class Model(nn.Module):
                 batch.rel_labels, batch.rel_len
             )  # [num_sentences, max_num_ents, max_num_ents]
 
+            # [num_sentences, max_num_ents, max_num_ents, num_labels]
             rel_scores, rel_loss = self.rel_scores(
                 entity_emb,   # [num_sentences, max_num_ents, emb]
                 entity_scores,  # [num_sentences, max_num_ents]
@@ -305,3 +305,4 @@ class Model(nn.Module):
                 )
 
         return predict_dict, loss
+

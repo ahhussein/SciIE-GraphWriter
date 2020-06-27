@@ -159,7 +159,8 @@ def pad_batch_tensors(tensors, convert_tensor=True):
     Returns:
       Numpy array of (B, ?)
     """
-    tensors = [np.expand_dims(tensor, 0) for tensor in tensors]
+
+    tensors = [np.expand_dims(tensor, 0) for document_tensors in tensors for tensor in document_tensors]
 
     shapes = [t.shape for t in tensors]
 
