@@ -58,6 +58,8 @@ def train(model, dataset, config, optimizer):
 
         predict_dict, loss = model(batch)
 
+        model.prepare_for_graph(predict_dict, batch)
+
         # Zero gradients, perform a backward pass, and update params.
         optimizer.zero_grad()
         loss.backward()

@@ -150,12 +150,14 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
     new_spans = []
     new_span_indices = []
     t, rs = best_state[0]
+    labels_result = []
     while (t, rs) in pointers:
         i, r, t0, rs0 = pointers[(t, rs)]
         new_spans.append((starts[i], ends[i], labels_inv[r]))
+        labels_result.append(labels)
         new_span_indices.append(i)
         t = t0
         rs = rs0
     # print spans
     # print new_spans[::-1]
-    return new_spans[::-1], new_span_indices
+    return new_spans[::-1], new_span_indices, labels_result
