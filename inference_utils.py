@@ -90,8 +90,8 @@ def mtl_decode(sentences, predict_dict, ner_labels_inv, rel_labels_inv, config):
 
 def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, pred_id,
                                      u_constraint=False):
+    # Num labels
     num_roles = scores.shape[1]
-
     # Get the pred for each candidate
     labels = torch.argmax(scores, dim=1)
     spans = zip(starts, ends, range(len(starts)))
@@ -117,6 +117,7 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
                 best_state[0] = (t1, rs1)
 
     for start, end, i in spans:
+        # Dummy label
         assert scores[i][0] == 0
         # The extra dummy score should be same for all states, so we can safely skip arguments overlap
         # with the predicate.

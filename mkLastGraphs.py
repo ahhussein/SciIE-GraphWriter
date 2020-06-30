@@ -10,6 +10,7 @@ with open('corpus.json') as f:
     if len([x for x in words if len(x)<2]) > (0.25 * len(words)):
       continue
     title = ' '.join([' '.join(x) for x in data['title']['sentences']])
+    # Abstract
     text = ' '.join([' '.join(x) for x in data['abstract']['sentences']])
     textidx = text.split(" ")
     corefd = {}
@@ -18,7 +19,9 @@ with open('corpus.json') as f:
     for chain in data['abstract']['coref']:
       mentions = [' '.join(textidx[x[0]:x[1]+1]).strip() for x in chain]
       mentions = [x for x in mentions if len(x)>0]
+      # Sort longest mention first
       mentions.sort(key=lambda x:len(x.split(" ")),reverse=True)
+
       cannon = mentions[0]
       for m in mentions:
         if m not in corefd:
@@ -36,19 +39,22 @@ with open('corpus.json') as f:
           corefd[k] = corefd[v]
           todo = True
 
-
+    # Entities longest mention, unique
     entsort = []#[v for k,v in corefd.items()]
     entsbak = [(v,"") for k,v in corefd.items()]
 
-
+    # dict of entity longest mention -> label
     nerd = {}
     for i,s in enumerate(data['abstract']['sentences']):
       nernums = data['abstract']['ner'][i]
       for x in nernums:
         a = ' '.join(s[x[0]:x[1]+1])
         entsbak.append((a,x[2]))
+
+        # Find entity longest mention
         if a in corefd:
           a = corefd[a]
+
         if a not in nerd:
           nerd[a] = x[2]
         entsort.append(a)

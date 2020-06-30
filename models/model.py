@@ -333,9 +333,14 @@ class Model(nn.Module):
         for i, sentence_entities in enumerate(span_indices):
             tensorized_indices[i,:len(sentence_entities)] = torch.tensor(sentence_entities)
 
+        x = torch.gather(ner_scores, 1, tensorized_indices)
 
         predicated_candidate_starts = torch.gather(candidate_starts, 1, tensorized_indices)
         predicated_candidate_ends = torch.gather(candidate_ends, 1, tensorized_indices)
+        widths = predicated_candidate_ends - predicated_candidate_starts + 1
+
+
+
 
         # Find the max entity list for all samples
 
