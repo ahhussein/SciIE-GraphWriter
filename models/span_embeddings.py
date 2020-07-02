@@ -102,10 +102,12 @@ class UnaryScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.hidden1 = nn.Linear(
+        self.hidden = nn.Linear(
             self.config["ffnn_size"],
             self.config["ffnn_size"]
         )
+
+        self.relu = nn.ReLU()
 
         self.output = nn.Linear(
             self.config["ffnn_size"],
@@ -114,18 +116,25 @@ class UnaryScores(nn.Module):
 
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
-        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
 
     def forward(self, candidate_span_emb):
         # candidate_span_emb = [num-candidates, emb]
-        x = self.output(
-            self.hidden1(
-                self.input(candidate_span_emb)
-            )
+        hidden1 = self.dropout(
+                    self.relu(
+                        self.input(candidate_span_emb)
+                    )
         )
 
-        scores = self.dropout(x)
+        hidden2 = self.dropout(
+                    self.relu(
+                        self.hidden(hidden1)
+                    )
+        )
+
+
+        scores = self.output(hidden2)
 
         # [num-candidates] or [k]
         return torch.squeeze(scores)
@@ -141,10 +150,12 @@ class RelScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.hidden1 = nn.Linear(
+        self.hidden = nn.Linear(
             self.config["ffnn_size"],
             self.config["ffnn_size"]
         )
+
+        self.relu = nn.ReLU()
 
         self.output = nn.Linear(
             self.config["ffnn_size"],
@@ -155,7 +166,7 @@ class RelScores(nn.Module):
 
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
-        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
 
     def forward(self, entity_emb, entity_scores, rel_labels, num_predicted_entities):
@@ -172,13 +183,19 @@ class RelScores(nn.Module):
         pair_emb_size = pair_emb.shape[3]
         flat_pair_emb = pair_emb.view([num_sentences * num_entities * num_entities, pair_emb_size])
 
-        x = self.output(
-            self.hidden1(
+        hidden1 = self.dropout(
+            self.relu(
                 self.input(flat_pair_emb)
             )
         )
 
-        scores = self.dropout(x)
+        hidden2 = self.dropout(
+            self.relu(
+                self.hidden(hidden1)
+            )
+        )
+
+        scores = self.output(hidden2)
 
         # [num_sentences * num_ents * num_ents, num_labels]
         flat_rel_scores = torch.squeeze(scores)
@@ -201,6 +218,9 @@ class RelScores(nn.Module):
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
 
+
+        # TODO important ensure that loss functiion is correct replacement for tensorflow
+        # tf.nn.sparse_softmax_cross_entropy_with_logits
         loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
 
         loss = torch.masked_select(loss, rel_loss_mask.view(-1))
@@ -217,7 +237,7 @@ class NerScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.hidden1 = nn.Linear(
+        self.hidden = nn.Linear(
             self.config["ffnn_size"],
             self.config["ffnn_size"]
         )
@@ -227,25 +247,35 @@ class NerScores(nn.Module):
             num_labels - 1
         )
 
+        self.relu = nn.ReLU()
+
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
-        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
 
     def forward(self, candidate_span_emb, flat_candidate_entity_scores,
                 candidate_span_ids, spans_log_mask, dummy_scores,
                 gold_ner_labels, candidate_mask
     ):
-        x = self.output(
-            self.hidden1(
+        hidden1 = self.dropout(
+            self.relu(
                 self.input(candidate_span_emb)
             )
         )
 
+        hidden2 = self.dropout(
+            self.relu(
+                self.hidden(hidden1)
+            )
+        )
+
+        scores = self.output(hidden2)
+
         # num-cand, num-labels
-        flat_ner_scores = torch.squeeze(self.dropout(x))
+        flat_ner_scores = torch.squeeze(scores)
 
         if self.config["span_score_weight"] > 0:
             flat_ner_scores += (

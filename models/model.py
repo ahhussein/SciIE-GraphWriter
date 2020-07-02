@@ -61,14 +61,14 @@ class Model(nn.Module):
         # [num_sentences, max_sentence_length]
         text_len_mask = util.sequence_mask(batch.text_len, max_sentence_length)
 
-        # [num_words = num-candidates, emb], padding removed
+        # [num_words, emb], padding removed
         flat_context_emb = util.flatten_emb_by_sentence(context_outputs, text_len_mask)
 
         # [num_words, emb]
         flat_head_emb = util.flatten_emb_by_sentence(head_emb, text_len_mask)
 
         # TODO ensure that sample are not cross documents
-        # doc len in terms of words in document
+        # doc len in terms of words in all samples in a batch
         doc_len = flat_context_emb.shape[0]
 
         # [num_candidates, emb], [num_candidates, max_span_width, emb], [num_candidates, max_span_width]
@@ -96,7 +96,7 @@ class Model(nn.Module):
 
         # [num_sentences, max_num_candidates_per_sentence] - zeros out the padding and arranges the ids
         # in a dense matrix in an absolute way
-        candidate_span_ids = util.sparse_to_dense(candidate_mask, candidate_span_emb.shape[0]).type(torch.long)
+        candidate_span_ids = util.sparse_to_dense(candidate_mask, num_candidates).type(torch.long)
 
         # [num_sentences, max_num_candidates_per_sentence]
         spans_log_mask = torch.log(candidate_mask.type(torch.float32))
@@ -250,6 +250,7 @@ class Model(nn.Module):
         else:
             rel_loss = 0
 
+        # TODO debug
         # Compute Coref loss.
         if self.config["coref_weight"] > 0:
             flat_cluster_ids = gold_coref_cluster_ids.view(-1)[flat_candidate_mask]  # [num_candidates]

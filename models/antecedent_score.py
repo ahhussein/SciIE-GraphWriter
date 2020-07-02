@@ -15,7 +15,7 @@ class AntecedentScore(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.hidden1 = nn.Linear(
+        self.hidden = nn.Linear(
             self.config["ffnn_size"],
             self.config["ffnn_size"]
         )
@@ -25,9 +25,11 @@ class AntecedentScore(nn.Module):
             1
         )
 
+        self.relu = nn.ReLU()
+
         self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
-        torch.nn.init.xavier_uniform_(self.hidden1.weight)
+        torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
 
 
@@ -41,7 +43,7 @@ class AntecedentScore(nn.Module):
 
             antecedent_distance_buckets = util.bucket_distance(antecedent_distance)  # [k, max_ant]
 
-            # TODO variable reuse with tf.variable_scope("features", reuse=reuse):
+            # TODO-Important variable reuse with tf.variable_scope("features", reuse=reuse):
             antecedent_distance_emb = self.antecedent_distance_emb[antecedent_distance_buckets] # [k, max_ant, emb]
             feature_emb_list.append(antecedent_distance_emb)
 
@@ -58,13 +60,21 @@ class AntecedentScore(nn.Module):
         pair_emb = torch.cat([target_emb, antecedent_emb, similarity_emb, feature_emb], 2)  # [k, max_ant, emb]
 
         #with tf.variable_scope("antecedent_scores", reuse=reuse):
-        x = self.output(
-            self.hidden1(
+        # candidate_span_emb = [num-candidates, emb]
+        hidden1 = self.dropout(
+            self.relu(
                 self.input(pair_emb)
             )
         )
 
-        antecedent_scores = self.dropout(x) # [k, max_ant, 1]
+        hidden2 = self.dropout(
+            self.relu(
+                self.hidden(hidden1)
+            )
+        )
+
+        antecedent_scores = self.output(hidden2) # [k, max_ant, 1]
+
         antecedent_scores = torch.squeeze(antecedent_scores, 2)  # [k, max_ant]
         # [k, max_ant]
         # Add to score the score of the corresponding proform
