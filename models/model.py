@@ -146,7 +146,7 @@ class Model(nn.Module):
             k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"])).type(torch.int32)
 
             # Different from the predicted indices from entities, meaning that
-            # mention scores are independant from span scores and can result in different spans
+            # mention scores are independent from relation scores and can result in different spans
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -207,6 +207,7 @@ class Model(nn.Module):
 
 
             # zero out (out of document range) score and -index scores
+            # TODO how to deal with that zerod added record
             antecedent_scores = torch.cat([
                 torch.zeros([k, 1]), antecedent_scores + antecedent_log_mask], 1)  # [k, max_ant+1]
 
@@ -225,6 +226,7 @@ class Model(nn.Module):
                 batch.rel_labels, batch.rel_len
             )  # [num_sentences, max_num_ents, max_num_ents]
 
+            # TODO rel mask is needed here to avoid the padding
             rel_scores, rel_loss = self.rel_scores(
                 entity_emb,   # [num_sentences, max_num_ents, emb]
                 entity_scores,  # [num_sentences, max_num_ents]
@@ -246,6 +248,7 @@ class Model(nn.Module):
                 "num_entities": num_entities,
                 "rel_labels": torch.argmax(rel_scores, -1), # predicated labels # [num_sentences, num_ents, num_ents]
                 "rel_scores": rel_scores # probability distr score for each label for each pair of entities
+
             })
         else:
             rel_loss = 0

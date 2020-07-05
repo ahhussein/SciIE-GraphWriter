@@ -212,6 +212,7 @@ class RelScores(nn.Module):
         num_labels = rel_scores.shape[3]
         entities_mask = util.sequence_mask(num_predicted_entities, max_num_entities)  # [num_sentences, max_num_entities]
 
+        # TODO use for the embedding representation fo entities rel
         rel_loss_mask = (
             entities_mask.unsqueeze(2) # [num_sentences, max_num_entities, 1]
             &
