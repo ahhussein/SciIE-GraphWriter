@@ -28,13 +28,13 @@ def main():
     writer = SummaryWriter(log_dir=config['log_dir'])
 
     # TODO test data set
-    dataset = TrainDataset(config)
+    dataset_wrapper = TrainDataset(config)
 
     # TODO is training
-    model = Model(config, dataset)
+    model = Model(config, dataset_wrapper)
 
     data_iter = data.Iterator(
-        dataset,
+        dataset_wrapper.dataset,
         config.batch_size,
         # device=args.device,
         sort_key=lambda x: len(x['text_len']),
@@ -53,7 +53,7 @@ def main():
 
     # TEST - report_frequency = 10
     for epoch in range(100):
-        predict_dict, loss = train(model, dataset, optimizer, writer, data_iter)
+        predict_dict, loss = train(model, dataset_wrapper, optimizer, writer, data_iter)
 
         if epoch % report_frequency == 0:
             print(f"epoch: {epoch+1} - loss: {loss}")
@@ -70,7 +70,7 @@ def train(model, dataset, optimizer, writer, data_iter):
 
         predict_dict, loss = model(batch)
 
-        model.prepare_for_graph(predict_dict, batch)
+        # model.prepare_for_graph(predict_dict, batch)
 
         writer.add_scalar('Loss/batch', loss, count)
 

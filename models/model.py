@@ -85,6 +85,7 @@ class Model(nn.Module):
             flat_candidate_ends
         )
 
+        num_candidates = candidate_span_emb.shape[0]
         max_num_candidates_per_sentence = candidate_mask.shape[1]
 
         predict_dict = {
@@ -249,12 +250,10 @@ class Model(nn.Module):
                 "num_entities": num_entities,
                 "rel_labels": torch.argmax(rel_scores, -1), # predicated labels # [num_sentences, num_ents, num_ents]
                 "rel_scores": rel_scores # probability distr score for each label for each pair of entities
-
             })
         else:
             rel_loss = 0
 
-        # TODO debug
         # Compute Coref loss.
         if self.config["coref_weight"] > 0:
             flat_cluster_ids = gold_coref_cluster_ids.view(-1)[flat_candidate_mask]  # [num_candidates]
@@ -310,66 +309,3 @@ class Model(nn.Module):
                 )
 
         return predict_dict, loss
-
-    def prepare_for_graph(self, predict_dict, batch):
-        candidate_starts = predict_dict['candidate_starts']
-        candidate_ends = predict_dict['candidate_ends']
-        ner_scores = predict_dict['ner_scores']
-
-        span_indices = []
-        all_labels = []
-        entity_lengths = []
-
-        for i in range(len(batch.text_len)):
-            x, span_index, labels = _dp_decode_non_overlapping_spans(
-                candidate_starts[i],
-                candidate_ends[i],
-                ner_scores[i],
-                batch.text_len[i],
-                self.data.rel_labels_inv,
-                None
-            )
-            span_indices.append(span_index)
-            all_labels.append(labels)
-            entity_lengths.append(len(span_index))
-
-        tensorized_indices = torch.ones(len(span_indices), max([len(x) for x in span_indices]), dtype=torch.int64)
-        for i, sentence_entities in enumerate(span_indices):
-            tensorized_indices[i,:len(sentence_entities)] = torch.tensor(sentence_entities)
-
-        x = torch.gather(ner_scores, 1, tensorized_indices)
-
-        predicated_candidate_starts = torch.gather(candidate_starts, 1, tensorized_indices)
-        predicated_candidate_ends = torch.gather(candidate_ends, 1, tensorized_indices)
-        widths = predicated_candidate_ends - predicated_candidate_starts + 1
-
-
-
-
-        # Find the max entity list for all samples
-
-        # span_indices = torch.tensor(span_indices)
-        # print(span_indices)
-        # entty_starts = util.batch_gather(predict_dict['candidate_starts'], torch.tensor(span_indices))
-        # entiity_ends = util.batch_gather(predict_dict['candidate_ends'], torch.tensor(span_indices))
-        #
-        # print(entity_starts)
-        # print(entity_ends)
-
-        # flat_selected = (torch.tensor(span_indices) + predict_dict['word_offset']).view(-1),
-        # print(flat_selected)
-        # entity_starts = predict_dict['candidate_mention_starts'][flat_selected]
-        # entity_starts = predict_dict['candidate_mention_ends'][flat_selected]
-
-        # Flatten sentences #[num-sentences x max-sentence-len]
-        # print(batch.tokens)
-        # flat_sentences = torch.masked_select(
-        #     batch.tokens.view(-1),
-        #     util.sequence_mask(batch.text_len, batch.tokens.shape[1])
-        # )
-        # print(util.sequence_mask(batch.text_len, batch.tokens.shape[1]))
-        #
-        # print(flat_sentences)
-        # exit()
-        #
-

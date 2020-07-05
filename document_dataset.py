@@ -28,7 +28,7 @@ _predict_names = [
     "rel_labels", "rel_scores",
 ]
 
-class DocumentDataset(data.Dataset):
+class DocumentDataset():
     def __init__(self, config):
         self.config = config
         self.lm_file = h5py.File(self.config["lm_path"], "r")
@@ -42,12 +42,15 @@ class DocumentDataset(data.Dataset):
         self.predict_names = _predict_names
 
 
-        self.graph_dataset = GraphDataset()
+        # self.graph_dataset = GraphDataset()
+        #
+        # self.data = {
+        #     "sentences": [],
+        #     "titles": []
+        # }
 
-        self.data = {
-            "sentences": [],
-            "titles": []
-        }
+        self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
+        self.text_out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
 
         # Fields declaration
         self.fields = [
@@ -74,8 +77,9 @@ class DocumentDataset(data.Dataset):
             ("ner_len", data.RawField()),
             ("coref_len", data.RawField()),
             ("rel_len", data.RawField()),
-            ("title", data.RawField()),
-            ("doc_len", data.RawField())
+            ("title", self.title),
+            ("doc_len", data.RawField()),
+            ('text_out', self.text_out)
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
@@ -98,7 +102,9 @@ class DocumentDataset(data.Dataset):
         self.examples = []
         self._load_data()
 
-        super(DocumentDataset, self).__init__(self.examples, self.fields)
+        self.dataset = data.Dataset(self.examples, self.fields)
+
+        self._build_vocab()
 
     def __len__(self):
         return len(self.examples)
@@ -142,9 +148,19 @@ class DocumentDataset(data.Dataset):
             doc_sentences_processed = []
             # TODO is_training should be class-level dynamic
 
+            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
+
+            # TODO title
+            title = 'Dummy title'
+
             [doc_sentences_processed.append(self.tensorize_example(doc_sentence, is_training=True)) for doc_sentence in doc_sentences]
 
-            example = data.Example.fromlist((np.stack(np.array(doc_sentences_processed),1).tolist()) + [len(doc_sentences_processed)]  , self.fields)
+            example = data.Example.fromlist(
+                (
+                    np.stack(np.array(doc_sentences_processed),1).tolist()
+                ) + [
+                    title, len(doc_sentences_processed), out_text
+                ]  , self.fields)
 
             self.examples.append(example)
 
@@ -183,7 +199,6 @@ class DocumentDataset(data.Dataset):
                 "coref": coref_mentions,
                 "word_offset": word_offset, # Sentence offset in the document
                 "doc_key": example["doc_key"],
-                "title": 'Dummy title', # TODO title
                 "sent_offset": example["sent_offset"]  # Sentence offset for the same doc ID.
             }
             word_offset += text_len
@@ -213,7 +228,6 @@ class DocumentDataset(data.Dataset):
         Tensorize examples and cache embeddings.
         """
         sentence = example["sentence"]
-        title = example["title"]
         doc_key = example["doc_key"]
         sent_id = example["sent_id"]
         word_offset = example["word_offset"]
@@ -287,22 +301,17 @@ class DocumentDataset(data.Dataset):
                 rel_labels, # e.g. "conjunction"
                 len(ner_starts), # entities
                 len(coref_starts), # mentions
-                len(rel_e1_starts), # relations,
-                example['title']
+                len(rel_e1_starts), # relations
             ]
-
-        self.data['sentences'].append(sentence)
-        self.data['titles'].append(title)
 
         return example
 
-
     def fix_batch(self, batch):
-        for field in self.fields:
+        for field in self.dataset.fields:
             convert_tensor = True
-            if field in ['tokens', 'doc_key', 'title']:
+            if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field == 'doc_len':
+            if field in ['doc_len', 'title', 'text_out']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
@@ -319,6 +328,24 @@ class DocumentDataset(data.Dataset):
 
         return batch
 
+    def _build_vocab(self):
+        self.title.build_vocab(self.dataset, min_freq=5)
+        self.text_out.build_vocab(self.dataset, min_freq=5)
+
+        # # Extend the outpt vocab to contain these tokens
+        # generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
+        # self.out.vocab.itos.extend(generics)
+        # for x in generics:
+        #     self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
+        #
+        # # Extend target to include all the entity types with numbers up to 40
+        # specials = "method material otherscientificterm metric task".split(" ")
+        # for x in specials:
+        #     for y in range(40):
+        #         s = "<" + x + "_" + str(y) + ">"
+        #         self.out.vocab.itos.append(s)
+        #         self.out.vocab.stoi[s] = len(self.out.vocab.itos)
+
 class TrainDataset(DocumentDataset):
     def _load_data(self):
         with open(self.config["train_path"], "r", encoding='utf8') as f:
@@ -328,7 +355,7 @@ class TrainDataset(DocumentDataset):
 
         self._read_documents(train_examples)
 
-        self.graph_dataset.build_vocab(self.data)
+        # self.graph_dataset.build_vocab(self.data)
 
 
 class EvalDataset(DocumentDataset):
@@ -365,56 +392,55 @@ class EvalDataset(DocumentDataset):
         self.eval_data = eval_data
         self.coref_eval_data = coref_eval_data
 
-
-
-class GraphDataset(data.Dataset):
-    def __init__(self):
-        self.src = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
-        self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
-        self.nerd = data.Field(sequential=True, batch_first=True, eos_token="<eos>")
-
-        self.fields = [
-            # title: e.g. Hierarchical Semantic Classification : Word Sense Disambiguation with World Knowledge
-            ("src", self.src),
-            # extracted entities from abstract: e.g. task-specific and background data ; lexical semantic classification problems ; word sense disambiguation task ; hierarchical learning architecture ; task-specific training data ; background data ; learning architecture
-            ("ent", data.RawField()),
-            # extracted entity types: e.g. <material> <task> <task> <method> <material> <material> <method>
-            ("nerd", self.nerd),
-            # relation between entities (0 based): e.g. 6 0 1
-            ("rel", data.RawField()),
-            # Processed Abstract: e.g. we present a <method_6> for <task_1> that supplements <material_4> with <material_5> encoding general '' world knowledge '' . the <method_6> compiles knowledge contained in a dictionary-ontology into additional training data ,
-            # and integrates <material_0> through a novel <method_3> . experiments on a <task_2> provide empirical evidence that this '' <method_3> '' outperforms a state-of-the-art standard '' flat '' one .
-            ("out", self.out),
-            # token order: e.g. 6 1 4 5 8 7 -1 0 3 7 -1 2 7 -1 (not yet clear)
-            ("sorder", data.RawField()),
-            # TODO Evaluation
-            ("tgt", data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>"))
-        ]
-
-        self.examples = []
-
-        super(GraphDataset, self).__init__(self.examples, self.fields)
-
-    def build_vocab(self, examples):
-        self.src.build_vocab(examples['titles'], min_freq=5)
-        self.nerd.build_vocab([])
-        self.out.build_vocab(examples['sentences'], min_freq=5)
-
-        # Extend the outpt vocab to contain these tokens
-        generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
-        self.out.vocab.itos.extend(generics)
-        for x in generics:
-            self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
-
-        # Extend target to include all the entity types with numbers up to 40
-        specials = "method material otherscientificterm metric task".split(" ")
-        for x in specials:
-            for y in range(40):
-                s = "<" + x + "_" + str(y) + ">"
-                self.out.vocab.itos.append(s)
-                self.out.vocab.stoi[s] = len(self.out.vocab.itos)
-
-        self.nerd.vocab.itos.extend(generics)
-        for x in generics:
-            self.nerd.vocab.stoi[x] = self.out.vocab.stoi[x]
-
+# TODO Is it ok to skip the entity indicators in the out
+# class GraphDataset(data.Dataset):
+#     def __init__(self):
+#         self.src = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
+#         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
+#         # self.nerd = data.Field(sequential=True, batch_first=True, eos_token="<eos>")
+#
+#         self.fields = [
+#             # title: e.g. Hierarchical Semantic Classification : Word Sense Disambiguation with World Knowledge
+#             ("src", self.src),
+#             # # extracted entities from abstract: e.g. task-specific and background data ; lexical semantic classification problems ; word sense disambiguation task ; hierarchical learning architecture ; task-specific training data ; background data ; learning architecture
+#             # ("ent", data.RawField()),
+#             # # extracted entity types: e.g. <material> <task> <task> <method> <material> <material> <method>
+#             # ("nerd", self.nerd),
+#             # # relation between entities (0 based): e.g. 6 0 1
+#             # ("rel", data.RawField()),
+#             # Processed Abstract: e.g. we present a <method_6> for <task_1> that supplements <material_4> with <material_5> encoding general '' world knowledge '' . the <method_6> compiles knowledge contained in a dictionary-ontology into additional training data ,
+#             # and integrates <material_0> through a novel <method_3> . experiments on a <task_2> provide empirical evidence that this '' <method_3> '' outperforms a state-of-the-art standard '' flat '' one .
+#             ("out", self.out),
+#             # # token order: e.g. 6 1 4 5 8 7 -1 0 3 7 -1 2 7 -1 (not yet clear)
+#             # ("sorder", data.RawField()),
+#             # # TODO Evaluation
+#             # ("tgt", data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>"))
+#         ]
+#
+#         self.examples = []
+#
+#         super(GraphDataset, self).__init__(self.examples, self.fields)
+#
+#     def build_vocab(self, examples):
+#         self.src.build_vocab(examples['titles'], min_freq=5)
+#         self.nerd.build_vocab([])
+#         self.out.build_vocab(examples['sentences'], min_freq=5)
+#
+#         # Extend the outpt vocab to contain these tokens
+#         generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
+#         self.out.vocab.itos.extend(generics)
+#         for x in generics:
+#             self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
+#
+#         # Extend target to include all the entity types with numbers up to 40
+#         specials = "method material otherscientificterm metric task".split(" ")
+#         for x in specials:
+#             for y in range(40):
+#                 s = "<" + x + "_" + str(y) + ">"
+#                 self.out.vocab.itos.append(s)
+#                 self.out.vocab.stoi[s] = len(self.out.vocab.itos)
+#
+#         self.nerd.vocab.itos.extend(generics)
+#         for x in generics:
+#             self.nerd.vocab.stoi[x] = self.out.vocab.stoi[x]
+#
