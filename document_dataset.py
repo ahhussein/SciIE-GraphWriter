@@ -183,7 +183,7 @@ class DocumentDataset(data.Dataset):
                 "coref": coref_mentions,
                 "word_offset": word_offset, # Sentence offset in the document
                 "doc_key": example["doc_key"],
-                "title": '', # TODO title
+                "title": 'Dummy title', # TODO title
                 "sent_offset": example["sent_offset"]  # Sentence offset for the same doc ID.
             }
             word_offset += text_len

@@ -19,6 +19,6 @@ class LSTMContextualize(nn.Module):
 
     def forward(self, context_emb):
         e, (h,c) = self.lstm(context_emb)
-
+        # TODO custom LSTM cell and projection
         # [max-sent-length, num-sentences, num-dir=2 * hz]
         return self.dropout(e)
