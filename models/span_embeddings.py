@@ -226,7 +226,7 @@ class RelScores(nn.Module):
 
         loss = torch.masked_select(loss, rel_loss_mask.view(-1))
 
-        return rel_scores, torch.sum(loss)
+        return rel_scores, torch.sum(loss), rel_loss_mask
 
 class NerScores(nn.Module):
     def __init__(self, config, num_labels, is_training=1):

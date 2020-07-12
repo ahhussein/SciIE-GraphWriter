@@ -8,7 +8,13 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 
-def main():
+# Graph Writer modules
+from GraphWriter.models.newmodel import model as graph
+from GraphWriter.pargs import pargs,dynArgs
+
+
+
+def main(args):
     # ds = dataset(args)
     if len(sys.argv) > 1:
         name = sys.argv[1]
@@ -33,6 +39,16 @@ def main():
     # TODO is training
     model = Model(config, dataset_wrapper)
 
+    # Graph writer arguments
+    args = dynArgs(args)
+    graph_model = graph(args)
+
+
+    # Move models to gpu?
+    # m = MODEL.to(args.device)
+
+    # TODO early stopping and separate optimizers?
+
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
         config.batch_size,
@@ -53,7 +69,7 @@ def main():
 
     # TEST - report_frequency = 10
     for epoch in range(100):
-        predict_dict, loss = train(model, dataset_wrapper, optimizer, writer, data_iter)
+        predict_dict, loss = train(model, graph_model, dataset_wrapper, optimizer, writer, data_iter)
 
         if epoch % report_frequency == 0:
             print(f"epoch: {epoch+1} - loss: {loss}")
@@ -63,13 +79,15 @@ def main():
 
         scheduler.step()
 
-def train(model, dataset, optimizer, writer, data_iter):
+def train(model, graph_model, dataset, optimizer, writer, data_iter):
     l = 0
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
 
         predict_dict, loss = model(batch)
 
+        # TODO return of the graph model
+        graph_model(batch)
         # model.prepare_for_graph(predict_dict, batch)
 
         writer.add_scalar('Loss/batch', loss, count)
@@ -85,4 +103,5 @@ def train(model, dataset, optimizer, writer, data_iter):
     return predict_dict, l/(count+1)
 
 if __name__ == "__main__":
-    main()
+    args = pargs()
+    main(args)

@@ -7,7 +7,6 @@ from models.antecedent_score import AntecedentScore
 import data_utils
 import util
 import span_prune_cpp
-from inference_utils import _dp_decode_non_overlapping_spans
 
 class Model(nn.Module):
     def __init__(self, config, data, is_training=1):
@@ -21,6 +20,10 @@ class Model(nn.Module):
         self.antecedent_scores = AntecedentScore(config, is_training)
         self.rel_scores = RelScores(config, len(self.data.rel_labels), is_training)
         self.ner_scores = NerScores(config, len(self.data.ner_labels), is_training)
+
+        # TODO get the length dynamically
+        # TODO investigate the no-relation link
+        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 2,1270)
 
     def forward(self, batch):
         # max sentence length in terms of number of words
@@ -105,7 +108,6 @@ class Model(nn.Module):
         # [num_sentences, max_num_candidates_per_sentence]
         spans_log_mask = torch.log(candidate_mask.type(torch.float32))
 
-
         # Get entity representations.
         if self.config["relation_weight"] > 0:
             # score candidates
@@ -130,6 +132,11 @@ class Model(nn.Module):
 
             # [num_sentences, max_num_ents, emb]
             entity_emb = candidate_span_emb[entity_span_indices]
+
+            entities_mask = util.sequence_mask(num_entities, entity_emb.shape[1]).view(-1)
+
+            # Top spans of interest (to be passed to graphwriter)
+            top_spans = entity_emb.view(entity_emb.shape[0] * entity_emb.shape[1], -1)[entities_mask]
 
         # Get coref representations.
         if self.config["coref_weight"] > 0:
@@ -229,13 +236,29 @@ class Model(nn.Module):
             )  # [num_sentences, max_num_ents, max_num_ents]
 
             # TODO rel mask is needed here to avoid the padding
-            rel_scores, rel_loss = self.rel_scores(
+            rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,   # [num_sentences, max_num_ents, emb]
                 entity_scores,  # [num_sentences, max_num_ents]
                 rel_labels, # [num_sentences, max_num_ents, max_num_ents]
                 num_entities
             )  # [num_sentences, max_num_ents, max_num_ents, num_labels]
 
+            # Rearrange scores
+            flattened_scores = rel_scores.view(-1, 8)
+            masked_flattened_scores = flattened_scores[rel_loss_mask.view(-1)].view(-1)
+
+            # Build graphs per document
+            batch.adj, rel_lengths = self.build_graphs(batch, num_entities, rel_scores, masked_flattened_scores)
+
+            # Rel embeddings
+            rel_indices = torch.arange(len(self.data.rel_labels)).repeat(
+                sum(num_entities * num_entities)
+            )
+
+            batch.top_spans, batch.rels = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
+
+            # TODO figure how to append mentions
+            # TODO train without mention
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
                 # -inf to the padded spans
@@ -309,3 +332,115 @@ class Model(nn.Module):
                 )
 
         return predict_dict, loss
+
+    def build_graphs(self, batch, num_entities, rel_scores, masked_flattened_scores):
+        # Holds adj matrix per document
+        adj = []
+        offset = 0
+        scores_offset = 0
+        doc_rel_ind_x = []
+        rel_lengths = []
+
+        for i in batch.doc_len:
+            doc_entities = num_entities[offset:offset + i]
+
+            entities_scores_x_ind = torch.arange(sum(doc_entities)).repeat_interleave(
+                (doc_entities * rel_scores.shape[3]).repeat_interleave(
+                    doc_entities.type(torch.int64)
+                ).type(torch.int64)
+            )
+
+            entities_scores_y_ind = torch.arange(entities_scores_x_ind.shape[0])
+
+            entities_rel_scores_arranged = torch.zeros(sum(doc_entities), sum(doc_entities * doc_entities) * 8)
+
+
+            entities_rel_scores_arranged[
+                (entities_scores_x_ind, entities_scores_y_ind)
+            ] = masked_flattened_scores[scores_offset:scores_offset +entities_rel_scores_arranged.shape[1]]
+
+            entities_adj = torch.diag(torch.ones(entities_rel_scores_arranged.shape[0]+1))
+
+            # add global node
+            entities_adj[entities_rel_scores_arranged.shape[0]:] = torch.ones(entities_rel_scores_arranged.shape[0]+1)
+            entities_adj[:,entities_rel_scores_arranged.shape[0]] = torch.ones(entities_rel_scores_arranged.shape[0]+1)
+
+            # Upper Graph
+            graph_adj_upper = torch.cat([
+                entities_adj,
+                torch.cat([
+                    entities_rel_scores_arranged, torch.zeros(entities_rel_scores_arranged.shape[1]).unsqueeze(0)
+                ], 0)
+            ], 1)
+
+
+            # Build Lower Graph
+            ent_offset = 0
+            for sent_num_ent in doc_entities:
+                sent_rel_ind_x = torch.tensor([8]).repeat_interleave((sent_num_ent * sent_num_ent).item())
+                doc_rel_ind_x.append(
+                    torch.arange(start=ent_offset, end=ent_offset+sent_num_ent.item()).repeat(sent_num_ent).repeat_interleave(sent_rel_ind_x))
+                ent_offset += sent_num_ent
+
+
+            # Get indices for one document
+            doc_rel_ind_x_tensor = torch.cat(doc_rel_ind_x, 0)
+            doc_rel_ind_y = torch.arange(doc_rel_ind_x_tensor.shape[0])
+
+            rel_lengths.append(doc_rel_ind_x_tensor.shape[0])
+
+            # Build matrix for a document
+            rel_scores_rearranged = torch.zeros(entities_rel_scores_arranged.shape[1], sum(doc_entities))
+
+            rel_scores_rearranged[
+                (doc_rel_ind_y, doc_rel_ind_x_tensor)
+            ] = masked_flattened_scores[scores_offset: scores_offset + rel_scores_rearranged.shape[0]]
+
+            graph_adj_lower = torch.cat(
+                (
+                    torch.cat([
+                        rel_scores_rearranged,
+                        torch.zeros(rel_scores_rearranged.shape[0]).unsqueeze(1)
+                    ], 1),
+                    torch.diag(torch.ones(rel_scores_rearranged.shape[0]))
+                ), 1)
+
+            adj.append(torch.cat((graph_adj_upper, graph_adj_lower), 0))
+
+
+            # reset values for the next document
+            doc_rel_ind_x = []
+            offset += i
+            scores_offset += entities_rel_scores_arranged.shape[1]
+
+        return adj, rel_lengths
+
+    def prepare_adj_embs(self, top_spans, num_entities, rel_indices, rel_lengths, doc_len):
+        # Get document lengths
+        offset = 0
+        ent_len = []
+        for i in doc_len:
+            ent_len.append(sum(num_entities[offset: i + offset]))
+            offset += i
+
+        # Max # entity per sample.
+        m = max(ent_len)
+
+        # list of all entities matrics padded to the max entity length
+        encs = [self.pad(x, m) for x in top_spans.split(ent_len)]
+
+        # Stack them to end up with 32 * maxlen_of_entities * hidden size
+        out = torch.stack(encs, 0)
+
+        # list of all relations embs
+        rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
+
+        return out, rels
+
+
+
+
+    def pad(self, tensor, length):
+        return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).fill_(0)])
+
+
