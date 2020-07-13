@@ -50,7 +50,7 @@ class DocumentDataset():
         # }
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
-        self.text_out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
+        self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
 
         # Fields declaration
         self.fields = [
@@ -79,7 +79,7 @@ class DocumentDataset():
             ("rel_len", data.RawField()),
             ("title", self.title),
             ("doc_len", data.RawField()),
-            ('text_out', self.text_out)
+            ('out', self.out)
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
@@ -311,7 +311,7 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'text_out']:
+            if field in ['doc_len', 'title', 'out']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
@@ -330,7 +330,7 @@ class DocumentDataset():
 
     def _build_vocab(self):
         self.title.build_vocab(self.dataset, min_freq=5)
-        self.text_out.build_vocab(self.dataset, min_freq=5)
+        self.out.build_vocab(self.dataset, min_freq=5)
 
         # # Extend the outpt vocab to contain these tokens
         # generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']

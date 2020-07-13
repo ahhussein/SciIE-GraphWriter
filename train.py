@@ -21,6 +21,7 @@ def main(args):
     else:
         name = "scientific_best_ner"
 
+    # TODO-new integrate the two configs
     config = util.get_config("experiments.conf")[name]
     report_frequency = config["report_frequency"]
 
@@ -33,15 +34,17 @@ def main(args):
     # Writer will output to ./runs/ directory by default
     writer = SummaryWriter(log_dir=config['log_dir'])
 
+    # Graph writer arguments
+    args = dynArgs(args)
+    graph_model = graph(args)
+
     # TODO test data set
     dataset_wrapper = TrainDataset(config)
 
     # TODO is training
     model = Model(config, dataset_wrapper)
 
-    # Graph writer arguments
-    args = dynArgs(args)
-    graph_model = graph(args)
+
 
 
     # Move models to gpu?

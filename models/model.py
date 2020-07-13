@@ -255,7 +255,7 @@ class Model(nn.Module):
                 sum(num_entities * num_entities)
             )
 
-            batch.top_spans, batch.rels = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
+            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
 
             # TODO figure how to append mentions
             # TODO train without mention
@@ -435,7 +435,7 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
-        return out, rels
+        return out, rels, torch.tensor(ent_len)
 
 
 
