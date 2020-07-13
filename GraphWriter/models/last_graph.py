@@ -84,7 +84,6 @@ class graph_encode(nn.Module):
       else:
         mask = (adj == 0).unsqueeze(1)
       for j in range(self.prop):
-        self.sparse = True
         if self.sparse:
           ngraph = [vgraph[k] for k in adj]
           ngraph = [self.pad(x,m) for x in ngraph]
