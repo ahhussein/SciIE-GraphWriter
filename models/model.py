@@ -256,9 +256,6 @@ class Model(nn.Module):
                 sum(num_entities * num_entities)
             )
 
-            # Add global node
-            #rel_indices = torch.cat((torch.tensor(len(self.data.rel_labels)).unsqueeze(1), rel_indices), 0)
-
             batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
 
             # TODO figure how to append mentions
@@ -420,9 +417,6 @@ class Model(nn.Module):
         return adj, rel_lengths
 
     def prepare_adj_embs(self, top_spans, num_entities, rel_indices, rel_lengths, doc_len):
-
-        # Project entity embs to lower space
-        top_spans = self.emb_projection(top_spans)
         # Get document lengths
         offset = 0
         ent_len = []
@@ -442,11 +436,7 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
-        rels_list = []
-        for rel in rels:
-            rels_list.append(torch.cat((self.rel_embs.weight[len(self.data.rel_labels)].unsqueeze(0), rel), 0))
-
-        return out, rels_list, torch.tensor(ent_len)
+        return out, rels, torch.tensor(ent_len)
 
 
 

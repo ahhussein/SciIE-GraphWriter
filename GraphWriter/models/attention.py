@@ -253,12 +253,12 @@ class MultiHeadAttention(nn.Module):
 
         # Multihead
         chunk_size = int(self._num_units / self._h)
-        Q = torch.cat(Q.split(split_size=chunk_size, dim=1), dim=0)
-        K = torch.cat(K.split(split_size=chunk_size, dim=1), dim=0)
-        V = torch.cat(V.split(split_size=chunk_size, dim=1), dim=0)
+        Q = torch.cat(Q.split(split_size=chunk_size, dim=2), dim=0)
+        K = torch.cat(K.split(split_size=chunk_size, dim=2), dim=0)
+        V = torch.cat(V.split(split_size=chunk_size, dim=2), dim=0)
 
         # calculate QK^T
-        attention = torch.matmul(Q, K.transpose(0, 1))
+        attention = torch.matmul(Q, K.transpose(1, 2))
         # normalize with sqrt(dk)
 
         # attention and _key_dim should be in the same device.
@@ -266,24 +266,15 @@ class MultiHeadAttention(nn.Module):
         attention = attention / torch.sqrt(self._key_dim).to(self.get_device())
 
         if mask is not None:
-            # original mask N * 1 * N
-            # After N*_H * 1 * N
-            mask = mask.repeat(1, self._h)
+          # original mask N * 1 * N
+          # After N*_H * 1 * N
+          mask = mask.repeat(self._h,1,1)
 
-            neighbour_idx = mask.nonzero(as_tuple=True)
+          # Discard 0 values, Note: mask is flipped
+          attention.masked_fill_(mask,-float('inf'))
 
-            neighbour_scores = mask[neighbour_idx]
-
-            attention_sparse = attention[neighbour_idx] * neighbour_scores
-
-            attention_sparse = F.softmax(attention_sparse, dim=-1)
-
-            attention = torch.zeros_like(attention)
-
-            attention[neighbour_idx] = attention_sparse
-        else:
-            attention = F.softmax(attention, dim=-1)
-
+        # -inf for nodes not neighbors
+        attention = F.softmax(attention, dim=-1)
         # apply dropout
         attention = F.dropout(attention, self._dropout_p)
         # multiplyt it with V
@@ -291,7 +282,7 @@ class MultiHeadAttention(nn.Module):
         # convert attention back to its input original size
         restore_chunk_size = int(attention.size(0) / self._h)
         attention = torch.cat(
-            attention.split(split_size=restore_chunk_size, dim=0), dim=1)
+            attention.split(split_size=restore_chunk_size, dim=0), dim=2)
         # residual connection
         attention += query
 
