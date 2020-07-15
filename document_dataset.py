@@ -331,6 +331,7 @@ class DocumentDataset():
     def _build_vocab(self):
         self.title.build_vocab(self.dataset, min_freq=5)
         self.out.build_vocab(self.dataset, min_freq=5)
+        self.config.ntoks = len(self.out.vocab)
 
         # # Extend the outpt vocab to contain these tokens
         # generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']

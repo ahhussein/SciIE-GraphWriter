@@ -7,13 +7,13 @@ from GraphWriter.models.beam import Beam
 from GraphWriter.models.splan import splanner
 
 class model(nn.Module):
-  def __init__(self,args):
+  def __init__(self,args, config):
     super().__init__()
     self.args = args
     cattimes = 3 if args.title else 2
 
-    #self.emb = nn.Embedding(args.ntoks,args.hsz)
-    #self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
+    self.emb = nn.Embedding(config.ntoks,args.hsz)
+    self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
     # TODO
     ##self.out = nn.Linear(args.hsz*cattimes,args.tgttoks)
     #self.le = list_encode(args)
@@ -45,15 +45,15 @@ class model(nn.Module):
       # b.src[1] sentences length, mask is used to discard padding
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
     outp,_ = b.out
-    #ents = b.ent
-    #entlens = ents[2]
+    ents = b.top_spans
+    entlens = b.doc_num_entities
 
     if self.graph:
       # rel[0] is adj, rel[1] is rel array
       gents,glob,grels = self.ge(b.adj,b.rels,(b.top_spans,b.doc_num_entities))
       hx = glob
       keys,mask = grels
-      # TODO what does this line do
+      # Flip the mask
       mask = mask==0
     else:
       mask = self.maskFromList(ents.size(),entlens)
@@ -105,6 +105,7 @@ class model(nn.Module):
       # Mixing word in position x with output of attention of last graph entity and title
       prev = torch.cat((a,k),1)
       hx,cx = self.lstm(prev,(hx,cx))
+      # TODO fix attention
       a = self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
       if self.args.title:
         a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)

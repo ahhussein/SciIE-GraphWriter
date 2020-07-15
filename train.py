@@ -34,17 +34,15 @@ def main(args):
     # Writer will output to ./runs/ directory by default
     writer = SummaryWriter(log_dir=config['log_dir'])
 
-    # Graph writer arguments
-    args = dynArgs(args)
-    graph_model = graph(args)
-
     # TODO test data set
     dataset_wrapper = TrainDataset(config)
 
+    # Graph writer arguments
+    args = dynArgs(args)
+    graph_model = graph(args, dataset_wrapper.config)
+
     # TODO is training
     model = Model(config, dataset_wrapper)
-
-
 
 
     # Move models to gpu?

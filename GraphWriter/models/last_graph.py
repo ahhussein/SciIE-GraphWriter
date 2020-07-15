@@ -12,15 +12,15 @@ def gelu(x):
 class Block(nn.Module):
   def __init__(self,args):
     super().__init__()
-    self.attn = MultiHeadAttention(args.hsz_attention,args.hsz_attention,args.hsz_attention,h=4,dropout_p=args.drop)
-    self.l1 = nn.Linear(args.hsz_attention,args.hsz_attention*4)
-    self.l2 = nn.Linear(args.hsz_attention*4,args.hsz_attention)
-    self.ln_1 = nn.LayerNorm(args.hsz_attention)
-    self.ln_2 = nn.LayerNorm(args.hsz_attention)
+    self.attn = MultiHeadAttention(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
+    self.l1 = nn.Linear(args.hsz,args.hsz*4)
+    self.l2 = nn.Linear(args.hsz*4,args.hsz)
+    self.ln_1 = nn.LayerNorm(args.hsz)
+    self.ln_2 = nn.LayerNorm(args.hsz)
     self.drop = nn.Dropout(args.drop)
     #self.act = gelu
-    self.act = nn.PReLU(args.hsz_attention*4)
-    self.gatact = nn.PReLU(args.hsz_attention)
+    self.act = nn.PReLU(args.hsz*4)
+    self.gatact = nn.PReLU(args.hsz)
 
   def forward(self,q,k, adj):
     q = self.attn(q,k,mask=adj).squeeze(1)
@@ -78,7 +78,7 @@ class graph_encode(nn.Module):
         lens = [len(x) for x in adj]
         m = max(lens)
         mask = torch.arange(0,m).unsqueeze(0).repeat(len(lens),1).long()
-        # mask and vents should be in the same device. 
+        # mask and vents should be in the same device.
         mask = (mask <= torch.LongTensor(lens).unsqueeze(1)).to(self.get_device())
         mask = (mask == 0).unsqueeze(1)
       else:
@@ -102,9 +102,6 @@ class graph_encode(nn.Module):
             vgraphs.append(vgraph_indv)
 
           vgraph = torch.cat(vgraphs, 0)
-          print(vgraph.shape)
-          exit()
-
 
 
           # Repeating N number of times bcause attention is n^2

@@ -23,8 +23,8 @@ class Model(nn.Module):
 
         # TODO get the length dynamically
         # TODO investigate the no-relation link
-        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 1, 400)
-        self.emb_projection = nn.Linear(1270, 400)
+        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 1, 500)
+        self.emb_projection = nn.Linear(1270, 500)
 
     def forward(self, batch):
         # max sentence length in terms of number of words
