@@ -134,7 +134,7 @@ class model(nn.Module):
     mask = (mask <= l.unsqueeze(1))
     mask = mask==0
     return mask
-    
+    rch
   def emb_w_vertex(self,outp,vertex):
     mask = outp>=self.args.ntoks
     if mask.sum()>0:

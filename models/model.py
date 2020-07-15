@@ -23,7 +23,8 @@ class Model(nn.Module):
 
         # TODO get the length dynamically
         # TODO investigate the no-relation link
-        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 2,1270)
+        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 1, 400)
+        self.emb_projection = nn.Linear(1270, 400)
 
     def forward(self, batch):
         # max sentence length in terms of number of words
@@ -255,6 +256,9 @@ class Model(nn.Module):
                 sum(num_entities * num_entities)
             )
 
+            # Add global node
+            #rel_indices = torch.cat((torch.tensor(len(self.data.rel_labels)).unsqueeze(1), rel_indices), 0)
+
             batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
 
             # TODO figure how to append mentions
@@ -416,6 +420,9 @@ class Model(nn.Module):
         return adj, rel_lengths
 
     def prepare_adj_embs(self, top_spans, num_entities, rel_indices, rel_lengths, doc_len):
+
+        # Project entity embs to lower space
+        top_spans = self.emb_projection(top_spans)
         # Get document lengths
         offset = 0
         ent_len = []
@@ -435,7 +442,11 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
-        return out, rels, torch.tensor(ent_len)
+        rels_list = []
+        for rel in rels:
+            rels_list.append(torch.cat((self.rel_embs.weight[len(self.data.rel_labels)].unsqueeze(0), rel), 0))
+
+        return out, rels_list, torch.tensor(ent_len)
 
 
 
