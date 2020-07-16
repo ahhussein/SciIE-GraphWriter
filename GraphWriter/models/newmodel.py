@@ -15,7 +15,7 @@ class model(nn.Module):
     self.emb = nn.Embedding(config.ntoks,args.hsz)
     self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
     # TODO
-    ##self.out = nn.Linear(args.hsz*cattimes,args.tgttoks)
+    #self.out = nn.Linear(args.hsz*cattimes,args.tgttoks)
     #self.le = list_encode(args)
     self.entout = nn.Linear(args.hsz,1)
     self.switch = nn.Linear(args.hsz*cattimes,1)

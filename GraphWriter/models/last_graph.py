@@ -94,7 +94,7 @@ class graph_encode(nn.Module):
           # Repeating N number of times bcause attention is n^2
           ngraph = torch.tensor(vgraph.repeat(N,1).view(N,N,-1),requires_grad=False)
           # Returns 1 vectors per each entity (was assembled from 4 indv vectors processed sep) in a sample (aggregated data from neighbours)
-          vgraph = self.gat[j](vgraph.unsqueeze(1),ngraph,mask, adj)
+          vgraph = self.gat[j](vgraph.unsqueeze(1),ngraph, adj)
           if self.args.model == 'gat':
             vgraph = vgraph.squeeze(1)
             vgraph = self.gatact(vgraph)

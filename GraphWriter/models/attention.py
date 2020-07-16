@@ -266,12 +266,23 @@ class MultiHeadAttention(nn.Module):
         attention = attention / torch.sqrt(self._key_dim).to(self.get_device())
 
         if mask is not None:
-          # original mask N * 1 * N
-          # After N*_H * 1 * N
-          mask = mask.repeat(self._h,1,1)
+            # original mask N * 1 * N
+            # After N*_H * 1 * N
+            mask = mask.repeat(self._h,1,1)
 
-          # Discard 0 values, Note: mask is flipped
-          attention.masked_fill_(mask,-float('inf'))
+            neighbour_idx = mask.nonzero(as_tuple=True)
+
+            neighbour_scores = mask[neighbour_idx]
+
+            attention_sparse = attention[neighbour_idx] * neighbour_scores
+
+            attention_sparse = F.softmax(attention_sparse, dim=-1)
+
+            attention = torch.zeros_like(attention)
+
+            attention[neighbour_idx] = attention_sparse
+        else:
+            attention = F.softmax(attention, dim=-1)
 
         # -inf for nodes not neighbors
         attention = F.softmax(attention, dim=-1)

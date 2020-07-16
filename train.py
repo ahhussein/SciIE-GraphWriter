@@ -52,7 +52,7 @@ def main(args):
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
-        config.batch_size,
+        1, #config.batch_size, # TODO-test
         # device=args.device,
         sort_key=lambda x: len(x['text_len']),
         repeat=False,

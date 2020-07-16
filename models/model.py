@@ -123,7 +123,7 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
-                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"] * 0.1, # TODO
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
 
@@ -417,6 +417,9 @@ class Model(nn.Module):
         return adj, rel_lengths
 
     def prepare_adj_embs(self, top_spans, num_entities, rel_indices, rel_lengths, doc_len):
+        # Project entity embs to lower space
+        top_spans = self.emb_projection(top_spans)
+
         # Get document lengths
         offset = 0
         ent_len = []
