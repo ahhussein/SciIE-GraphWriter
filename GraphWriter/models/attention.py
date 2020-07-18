@@ -21,7 +21,7 @@ class MatrixAttn(nn.Module):
     # dev = emb.get_device()
     # emask and emb should be in the same device 
     emask = torch.arange(0,emb.size(1)).unsqueeze(0).repeat(emb.size(0),1).long().to(self.get_device())
-    
+
     emask = (emask >= elen.unsqueeze(1)).unsqueeze(1)
     decsmall = self.attnlin(dec)
     unnorm = torch.bmm(decsmall,emb.transpose(1,2))
@@ -284,8 +284,6 @@ class MultiHeadAttention(nn.Module):
         else:
             attention = F.softmax(attention, dim=-1)
 
-        # -inf for nodes not neighbors
-        attention = F.softmax(attention, dim=-1)
         # apply dropout
         attention = F.dropout(attention, self._dropout_p)
         # multiplyt it with V

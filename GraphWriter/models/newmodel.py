@@ -14,8 +14,13 @@ class model(nn.Module):
 
     self.emb = nn.Embedding(config.ntoks,args.hsz)
     self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
-    # TODO
-    #self.out = nn.Linear(args.hsz*cattimes,args.tgttoks)
+
+    self.out = nn.Linear(
+      args.hsz*cattimes,
+      #args.tgttoks # TODO target tokens
+      config.ntoks
+    )
+
     #self.le = list_encode(args)
     self.entout = nn.Linear(args.hsz,1)
     self.switch = nn.Linear(args.hsz*cattimes,1)
@@ -73,7 +78,7 @@ class model(nn.Module):
 
     # Glob Removes gradient backward path
     # B x hz
-    cx = torch.tensor(hx)
+    cx = hx.clone().detach().requires_grad_(True)
     #print(hx.size(),mask.size(),keys.size())
     a = torch.zeros_like(hx) #self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
     if self.args.title:
@@ -105,7 +110,6 @@ class model(nn.Module):
       # Mixing word in position x with output of attention of last graph entity and title
       prev = torch.cat((a,k),1)
       hx,cx = self.lstm(prev,(hx,cx))
-      # TODO fix attention
       a = self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
       if self.args.title:
         a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)
@@ -114,19 +118,20 @@ class model(nn.Module):
       out = torch.cat((hx,a),1)
       outputs.append(out)
     l = torch.stack(outputs,1)
-    s = torch.sigmoid(self.switch(l))
+
+    ## -- Experiment 1: Commenting out all copy and switch related vars and only consider generating voca
+    #s = torch.sigmoid(self.switch(l))
     o = self.out(l)
     o = torch.softmax(o,2)
-    o = s*o
+    #o = s*o
 
-    # TODO: from here
     #compute copy attn
-    _, z = self.mattn(l,(ents,entlens))
+    #_, z = self.mattn(l,(ents,entlens))
     #z = torch.softmax(z,2)
-    z = (1-s)*z
-    o = torch.cat((o,z),2)
+    #z = (1-s)*z
+    #o = torch.cat((o,z),2)
     o = o+(1e-6*torch.ones_like(o))
-    return o.log(),z,planlogits
+    return o.log(),planlogits
 
   def maskFromList(self,size,l):
     # size[1] = max sample (e.g. sentence) length
@@ -178,7 +183,7 @@ class model(nn.Module):
     else:
       planlogits = None
 
-    cx = torch.tensor(hx)
+    cx = hx.clone().detach().requires_grad_(True)
     a = self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
     if self.args.title:
       a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)

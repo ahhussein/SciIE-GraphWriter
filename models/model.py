@@ -123,7 +123,7 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
-                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"] * 0.1, # TODO
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"] * 0.25, # TODO
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
 
@@ -439,8 +439,12 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
-        return out, rels, torch.tensor(ent_len)
+        rels_list = []
 
+        for rel in rels:
+            rels_list.append(torch.cat((self.rel_embs.weight[len(self.data.rel_labels)].unsqueeze(0), rel), 0))
+
+        return out, rels_list, torch.tensor(ent_len)
 
 
 

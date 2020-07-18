@@ -66,6 +66,7 @@ torch::Tensor extract_spans(
               if (latest_end_iter != start_to_latest_end.end() && latest_end_iter->second > end) {
                 // Given (), exists [], such that ( [ ) ]
                 any_crossing = true;
+                cout<<'somthing';
                 break;
               }
             }

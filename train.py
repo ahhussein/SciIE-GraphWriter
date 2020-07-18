@@ -5,14 +5,21 @@ from torchtext import data
 from document_dataset import TrainDataset
 from models.model import Model
 import torch
-from torch.utils.tensorboard import SummaryWriter
+from torch.nn import functional as F
+from torch import nn
+from optimizers import MultipleOptimizer
 
+from torch.utils.tensorboard import SummaryWriter
 
 # Graph Writer modules
 from GraphWriter.models.newmodel import model as graph
 from GraphWriter.pargs import pargs,dynArgs
 
-
+def update_lr(o,args,epoch):
+  if epoch%args.lrstep == 0:
+    o.param_groups[0]['lr'] = args.lrhigh
+  else:
+    o.param_groups[0]['lr'] -= args.lrchange
 
 def main(args):
     # ds = dataset(args)
@@ -48,60 +55,107 @@ def main(args):
     # Move models to gpu?
     # m = MODEL.to(args.device)
 
-    # TODO early stopping and separate optimizers?
+    # TODO early stopping?
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
-        1, #config.batch_size, # TODO-test
+        config.batch_size,
         # device=args.device,
         sort_key=lambda x: len(x['text_len']),
         repeat=False,
         train=True
     )
 
-    # Get random input
-    #inputs = dataset.fix_batch(next(iter(data_iter)))
+    sci_opt = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
+    graph_opt = torch.optim.SGD(graph_model.parameters(), lr=args.lr, momentum=0.9)
 
-    #writer.add_graph(model, inputs)
+    # Combined graph and sci optimizers
+    optimizer = MultipleOptimizer(
+        sci_opt,
+        graph_opt
+    )
 
-    # TODO clip gradients? see TF srl_model
-    optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=config["decay_rate"])
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=sci_opt, gamma=config["decay_rate"])
 
     # TEST - report_frequency = 10
     for epoch in range(100):
-        predict_dict, loss = train(model, graph_model, dataset_wrapper, optimizer, writer, data_iter)
+        predict_dict, loss = train(
+            model,
+            graph_model,
+            dataset_wrapper,
+            optimizer,
+            writer,
+            data_iter,
+            args.device,
+            config
+        )
 
         if epoch % report_frequency == 0:
             print(f"epoch: {epoch+1} - loss: {loss}")
             torch.save(model.state_dict(), f"{config['log_dir']}/model__{epoch+1}")
 
+        # TODO validation loss
+        vloss = 0
+        if args.lrwarm:
+            update_lr(graph_opt, args, epoch)
+            print("Saving model")
+            torch.save(
+                graph_model.state_dict(),
+                args.save + "/" + str(epoch) + ".vloss-" + vloss + ".lr-" + str(graph_opt.param_groups[0]['lr'])
+            )
+
         writer.add_scalar('Loss/train', loss, epoch)
 
         scheduler.step()
 
-def train(model, graph_model, dataset, optimizer, writer, data_iter):
+def train(model, graph_model, dataset, optimizer, writer, data_iter, device, config):
     l = 0
+    ex = 0
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
 
-        predict_dict, loss = model(batch)
+        predict_dict, sci_loss = model(batch)
 
-        # TODO return of the graph model
-        graph_model(batch)
-        # model.prepare_for_graph(predict_dict, batch)
+        p, planlogits = graph_model(batch)
 
-        writer.add_scalar('Loss/batch', loss, count)
+        p = p[:, :-1, :].contiguous()
 
-        # Zero gradients, perform a backward pass, and update params.
-        optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
+        tgt = batch.out[0][:, 1:].contiguous().view(-1).to(device)
+        gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
+
+        total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
+
+        total_loss.backward()
+
+        l += total_loss.item() * len(batch.doc_len)
+
+        #gr_loss.backward()
+
+        # Clip gw parameters
+        #nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
+        #loss += gr_loss.item() * len(batch.doc_len)
+
         optimizer.step()
+        optimizer.zero_grad()
 
-        l += loss
+        # Number of documents
+        ex += len(batch.doc_len)
 
-    return predict_dict, l/(count+1)
+        # Summarize results
+        writer.add_scalar('Loss/sci_loss/batch', sci_loss, count)
+        writer.add_scalar('Loss/gr_loss/batch', gr_loss, count)
+        writer.add_scalar('Loss/total/batch', total_loss, count)
+
+        # Zero gradients, perform a backward pass, and update params for the model1
+        #optimizer.zero_grad()
+        #sci_loss.backward()
+        #torch.nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
+        #optimizer.step()
+
+        nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
+        nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
+
+    return predict_dict, l/(ex)
 
 if __name__ == "__main__":
     args = pargs()
