@@ -105,6 +105,7 @@ def main(args):
             )
 
         writer.add_scalar('Loss/train', loss, epoch)
+        print(f"epoch: {epoch + 1} - loss: {loss}")
 
         scheduler.step()
 
@@ -142,9 +143,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         ex += len(batch.doc_len)
 
         # Summarize results
-        writer.add_scalar('Loss/sci_loss/batch', sci_loss, count)
-        writer.add_scalar('Loss/gr_loss/batch', gr_loss, count)
-        writer.add_scalar('Loss/total/batch', total_loss, count)
+        writer.add_scalar('Loss/sci_loss/batch', sci_loss)
+        writer.add_scalar('Loss/gr_loss/batch', gr_loss)
+        writer.add_scalar('Loss/total/batch', total_loss)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         #optimizer.zero_grad()

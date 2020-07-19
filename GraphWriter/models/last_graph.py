@@ -91,16 +91,24 @@ class graph_encode(nn.Module):
           #print(ngraph.size(),vgraph.size(),mask.size())
           vgraph = self.gat[j](vgraph.unsqueeze(1),ngraph,mask)
         else:
+          vgraphs = []
 
-          # Repeating N number of times bcause attention is n^2
-          ngraph = vgraph.repeat(N,1).view(N,N,-1).clone().detach().requires_grad_(False)
+          for k in range(vgraph.shape[0]):
+            neighbour_idx = adj[k].nonzero(as_tuple=True)
 
-          # Returns 1 vectors per each entity (was assembled from 4 indv vectors processed sep) in a sample (aggregated data from neighbours)
-          vgraph = self.gat[j](vgraph.unsqueeze(1),ngraph, adj.unsqueeze(1))
-          if self.args.model == 'gat':
-            vgraph = vgraph.squeeze(1)
-            vgraph = self.gatact(vgraph)
+            neighbour_scores = adj[k][neighbour_idx]
+
+            keys = vgraph[neighbour_idx]
+
+            vgraph_indv = self.gat[j](vgraph[k].unsqueeze(0), keys, neighbour_scores)
+
+            vgraphs.append(vgraph_indv)
+
+          vgraph = torch.cat(vgraphs, 0)
+
       graphs.append(vgraph)
+
+      print("done with graph")
 
       # Append last entity vector (avoid relations and global node)?
       glob.append(vgraph[entlens[i]])
