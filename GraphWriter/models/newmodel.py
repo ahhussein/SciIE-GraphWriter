@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from GraphWriter.models.attention import MultiHeadAttention, MatrixAttn
+from GraphWriter.models.attention import MultiHeadAttention, MatrixAttn, MultiHeadAttention2
 from GraphWriter.models.list_encoder import list_encode, lseq_encode
 from GraphWriter.models.last_graph import graph_encode
 from GraphWriter.models.beam import Beam
@@ -24,7 +24,7 @@ class model(nn.Module):
     #self.le = list_encode(args)
     self.entout = nn.Linear(args.hsz,1)
     self.switch = nn.Linear(args.hsz*cattimes,1)
-    self.attn = MultiHeadAttention(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
+    self.attn = MultiHeadAttention2(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
     self.mattn = MatrixAttn(args.hsz*cattimes,args.hsz)
     self.graph = (args.model in ['graph','gat','gtrans'])
     print(args.model)

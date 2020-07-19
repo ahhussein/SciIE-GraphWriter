@@ -290,3 +290,93 @@ class MultiHeadAttention(nn.Module):
         #attention = self.ln(attention)
 
         return attention
+
+class MultiHeadAttention2(nn.Module):
+    def __init__(self,
+                 query_dim,
+                 key_dim,
+                 num_units, # of units for all heads will be divded by heads
+                 dropout_p=0.5,
+                 h=8, # 8 heads
+                 is_masked=False):
+        super(MultiHeadAttention2, self).__init__()
+
+        if query_dim != key_dim:
+            raise ValueError("query_dim and key_dim must be the same")
+        if num_units % h != 0:
+            raise ValueError("num_units must be dividable by h")
+        if query_dim != num_units:
+            raise ValueError("to employ residual connection, the number of "
+                             "query_dim and num_units must be the same")
+
+        self._num_units = num_units
+        self._h = h
+        self._key_dim = torch.tensor(key_dim,requires_grad=False).float()
+        self._dropout_p = dropout_p
+        self._is_masked = is_masked
+
+        self.query_layer = nn.Linear(query_dim, num_units, bias=False)
+        self.key_layer = nn.Linear(key_dim, num_units, bias=False)
+        self.value_layer = nn.Linear(key_dim, num_units, bias=False)
+        self.bn = nn.BatchNorm1d(num_units)
+        self.ln = nn.LayerNorm(num_units)
+
+    def get_device(self):
+        # return the device of the tensor, either "cpu"
+        # or number specifiing the index of gpu.
+        dev = next(self.parameters()).get_device()
+        if dev == -1:
+            return "cpu"
+        return dev
+
+    def forward(self, query, keys, mask=None):
+        Q = self.query_layer(query)
+        K = self.key_layer(keys)
+        V = self.value_layer(keys)
+
+        # split each Q, K and V into h different values from dim 2
+        # and then merge them back together in dim 0
+
+        # Multihead
+        chunk_size = int(self._num_units / self._h)
+        Q = torch.cat(Q.split(split_size=chunk_size, dim=2), dim=0)
+        K = torch.cat(K.split(split_size=chunk_size, dim=2), dim=0)
+        V = torch.cat(V.split(split_size=chunk_size, dim=2), dim=0)
+
+        # calculate QK^T
+        attention = torch.matmul(Q, K.transpose(1, 2))
+        # normalize with sqrt(dk)
+
+        # attention and _key_dim should be in the same device.
+        # N * _h X 1 X N
+        attention = attention / torch.sqrt(self._key_dim).to(self.get_device())
+
+        if mask is not None:
+          # original mask N * 1 * N
+          # After N*_H * 1 * N
+          mask = mask.repeat(self._h,1,1)
+
+          # Discard 0 values, Note: mask is flipped
+          attention.masked_fill_(mask,-float('inf'))
+
+        # -inf for nodes not neighbors
+        attention = F.softmax(attention, dim=-1)
+        # apply dropout
+        attention = F.dropout(attention, self._dropout_p)
+        # multiplyt it with V
+        attention = torch.matmul(attention, V)
+        # convert attention back to its input original size
+        restore_chunk_size = int(attention.size(0) / self._h)
+        attention = torch.cat(
+            attention.split(split_size=restore_chunk_size, dim=0), dim=2)
+        # residual connection
+        attention += query
+
+        # TODO: why commented batch and ln normailzation
+        # apply batch normalization
+        #attention = self.bn(attention.transpose(1, 2)).transpose(1, 2)
+        # apply layer normalization
+        #attention = self.ln(attention)
+
+        return attention
+

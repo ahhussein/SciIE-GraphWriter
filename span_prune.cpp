@@ -66,7 +66,6 @@ torch::Tensor extract_spans(
               if (latest_end_iter != start_to_latest_end.end() && latest_end_iter->second > end) {
                 // Given (), exists [], such that ( [ ) ]
                 any_crossing = true;
-                cout<<'somthing';
                 break;
               }
             }
@@ -107,9 +106,9 @@ torch::Tensor extract_spans(
       if (_sort_spans) {
         std::sort(top_span_indices.begin(), top_span_indices.end(),
                 [&candidate_starts, &candidate_ends, &l] (int i1, int i2) {
-
-
-
+                 if (i1 >= candidate_starts.size(1) || i1 < 0 || i2 >= candidate_starts.size(1) || i2 < 0) {
+                    return false;
+                 }
                   if (candidate_starts[l][i1].item<int64_t>() < candidate_starts[l][i2].item<int64_t>()) {
                     return true;
                   } else if (candidate_starts[l][i1].item<int64_t>() > candidate_starts[l][i1].item<int64_t>()) {
