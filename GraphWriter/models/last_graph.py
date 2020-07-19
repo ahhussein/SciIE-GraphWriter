@@ -117,13 +117,20 @@ class graph_encode(nn.Module):
     elens = [x.size(0) for x in graphs]
     gents = [self.pad(x,max(elens)) for x in graphs]
 
+    print('padding')
     # PAD graphs again!
     gents = torch.stack(gents,0)
+    print('gents.shape')
+    print(gents.shape)
     elens = torch.LongTensor(elens)
     emask = torch.arange(0,gents.size(1)).unsqueeze(0).repeat(gents.size(0),1).long()
     # emask and vents should be in the same device. 
     emask = (emask <= elens.unsqueeze(1)).to(self.get_device())
+    print("emask")
+    print(emask.shape)
     glob = torch.stack(glob,0)
+    print("glob.shape")
+    print(glob.shape)
     # Gents all graphs representation padded to the max length
     # size N X max_entity_sample_length X 500
 
