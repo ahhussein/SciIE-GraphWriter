@@ -15,6 +15,8 @@ from torch.utils.tensorboard import SummaryWriter
 from GraphWriter.models.newmodel import model as graph
 from GraphWriter.pargs import pargs,dynArgs
 
+global_step_batch = 0
+
 def update_lr(o,args,epoch):
   if epoch%args.lrstep == 0:
     o.param_groups[0]['lr'] = args.lrhigh
@@ -78,8 +80,9 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=sci_opt, gamma=config["decay_rate"])
 
     # TEST - report_frequency = 10
+    offset = 0
     for epoch in range(100):
-        predict_dict, loss = train(
+        predict_dict, loss, offset = train(
             model,
             graph_model,
             dataset_wrapper,
@@ -87,7 +90,8 @@ def main(args):
             writer,
             data_iter,
             args.device,
-            config
+            config,
+            offset
         )
 
         if epoch % report_frequency == 0:
@@ -109,7 +113,7 @@ def main(args):
 
         scheduler.step()
 
-def train(model, graph_model, dataset, optimizer, writer, data_iter, device, config):
+def train(model, graph_model, dataset, optimizer, writer, data_iter, device, config, offset = 0):
     l = 0
     ex = 0
     for count, batch in enumerate(data_iter):
@@ -143,9 +147,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         ex += len(batch.doc_len)
 
         # Summarize results
-        writer.add_scalar('Loss/sci_loss/batch', sci_loss)
-        writer.add_scalar('Loss/gr_loss/batch', gr_loss)
-        writer.add_scalar('Loss/total/batch', total_loss)
+        step = count + offset
+        writer.add_scalar('Loss/sci_loss/batch', sci_loss, step=step)
+        writer.add_scalar('Loss/gr_loss/batch', gr_loss, step=step)
+        writer.add_scalar('Loss/total/batch', total_loss, step=step)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         #optimizer.zero_grad()
@@ -156,7 +161,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
         nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
 
-    return predict_dict, l/(ex)
+    return predict_dict, l/(ex), step
 
 if __name__ == "__main__":
     args = pargs()
