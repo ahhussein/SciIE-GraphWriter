@@ -56,7 +56,6 @@ class model(nn.Module):
     if self.graph:
       # rel[0] is adj, rel[1] is rel array
       gents,glob,grels = self.ge(b.adj,b.rels,(b.top_spans,b.doc_num_entities))
-      print("done with graph encode")
       hx = glob
       keys,mask = grels
       # Flip the mask
@@ -80,9 +79,6 @@ class model(nn.Module):
     # Glob Removes gradient backward path
     # B x hz
     cx = hx.clone().detach().requires_grad_(True)
-    print("cx.shape")
-    print(cx.shape)
-    #print(hx.size(),mask.size(),keys.size())
     a = torch.zeros_like(hx) #self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
     if self.args.title:
       # Attend last entity of each sample graph to each word in sentence in the title
@@ -96,8 +92,6 @@ class model(nn.Module):
 
     # max max length of words * (B) * hz?
     e = self.emb(outp).transpose(0,1)
-    print("e.shape")
-    print(e.shape)
     outputs = []
     # each 1,2,3 word in a batch
     for i, k in enumerate(e):
@@ -115,10 +109,7 @@ class model(nn.Module):
       # Mixing word in position x with output of attention of last graph entity and title
       prev = torch.cat((a,k),1)
       hx,cx = self.lstm(prev,(hx,cx))
-      print(f"attentionn, {i}")
       a = self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
-      print("a.shape")
-      print(a.shape)
       if self.args.title:
         a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)
         #a =  a + (self.mix(hx)*a2)

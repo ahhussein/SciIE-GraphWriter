@@ -252,7 +252,7 @@ class NerScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
