@@ -9,17 +9,17 @@ import util
 import span_prune_cpp
 
 class Model(nn.Module):
-    def __init__(self, config, data, is_training=1):
+    def __init__(self, config, data):
         super().__init__()
         self.config = config
         self.data = data
-        self.embeddings = Embeddings(config, data, is_training)
-        self.lstm = LSTMContextualize(config, data, is_training)
-        self.span_embeddings = SpanEmbeddings(config, data, is_training)
-        self.unary_scores = UnaryScores(config, is_training)
-        self.antecedent_scores = AntecedentScore(config, is_training)
-        self.rel_scores = RelScores(config, len(self.data.rel_labels), is_training)
-        self.ner_scores = NerScores(config, len(self.data.ner_labels), is_training)
+        self.embeddings = Embeddings(config, data)
+        self.lstm = LSTMContextualize(config, data)
+        self.span_embeddings = SpanEmbeddings(config, data)
+        self.unary_scores = UnaryScores(config)
+        self.antecedent_scores = AntecedentScore(config)
+        self.rel_scores = RelScores(config, len(self.data.rel_labels))
+        self.ner_scores = NerScores(config, len(self.data.ner_labels))
 
         # TODO get the length dynamically
         # TODO investigate the no-relation link
@@ -123,7 +123,7 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
-                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"] * 0.1,
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
 

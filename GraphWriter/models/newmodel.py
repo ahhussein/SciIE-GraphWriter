@@ -27,7 +27,7 @@ class model(nn.Module):
     self.attn = MultiHeadAttention2(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
     self.mattn = MatrixAttn(args.hsz*cattimes,args.hsz)
     self.graph = (args.model in ['graph','gat','gtrans'])
-    print(args.model)
+
     if self.graph:
       self.ge = graph_encode(args)
     if args.plan:

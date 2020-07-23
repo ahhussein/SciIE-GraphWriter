@@ -3,7 +3,7 @@ import torch
 import util
 
 class SpanEmbeddings(nn.Module):
-    def __init__(self, config, data, is_training=1):
+    def __init__(self, config, data):
         super().__init__()
         self.config = config
         self.data = data
@@ -14,7 +14,7 @@ class SpanEmbeddings(nn.Module):
         self.embeddings = nn.Parameter(emb)
 
         self.softmax = nn.Softmax(1)
-        self.dropout = nn.Dropout(1- is_training * self.config['dropout_rate'])
+        self.dropout = nn.Dropout(1- self.config['dropout_rate'])
         self.ffnn = nn.Linear(
             config['contextualization_size'] * config['contextualization_layers'] * 2,
             self.config['num_attention_heads']
@@ -94,7 +94,7 @@ class SpanEmbeddings(nn.Module):
         return span_emb, head_scores, span_text_emb, span_indices, span_indices_log_mask
 
 class UnaryScores(nn.Module):
-    def __init__(self, config, is_training=1):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.input = nn.Linear(
@@ -114,7 +114,7 @@ class UnaryScores(nn.Module):
             1
         )
 
-        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -141,7 +141,7 @@ class UnaryScores(nn.Module):
 
 
 class RelScores(nn.Module):
-    def __init__(self, config, num_labels, is_training=1):
+    def __init__(self, config, num_labels):
         super().__init__()
         self.num_labels = num_labels
         self.config = config
@@ -164,7 +164,7 @@ class RelScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -229,7 +229,7 @@ class RelScores(nn.Module):
         return rel_scores, torch.sum(loss), rel_loss_mask
 
 class NerScores(nn.Module):
-    def __init__(self, config, num_labels, is_training=1):
+    def __init__(self, config, num_labels):
         super().__init__()
         self.num_labels = num_labels
         self.config = config

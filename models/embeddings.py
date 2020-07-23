@@ -75,13 +75,13 @@ class ElmoEmbeddings(nn.Module):
 
 
 class Embeddings(nn.Module):
-    def __init__(self, config, data, is_training=1):
+    def __init__(self, config, data):
         super().__init__()
         self.data = data
         self.config = config
         self.char_embeddings = CharEmbeddings(config, data)
         self.elmo_embeddings = ElmoEmbeddings(config, data)
-        self.dropout = nn.Dropout(1 - is_training * self.config['lexical_dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['lexical_dropout_rate'])
 
     def forward(self, batch):
         # [num_sentences, max_sentence_length, emb-context]

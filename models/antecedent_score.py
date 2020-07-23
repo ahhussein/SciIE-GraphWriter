@@ -3,7 +3,7 @@ import torch
 import util
 
 class AntecedentScore(nn.Module):
-    def __init__(self, config, is_training=1):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.antecedent_distance_emb = nn.init.xavier_uniform_(
@@ -27,7 +27,7 @@ class AntecedentScore(nn.Module):
 
         self.relu = nn.ReLU()
 
-        self.dropout = nn.Dropout(1 - is_training * self.config['dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)

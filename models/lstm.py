@@ -1,7 +1,7 @@
 from torch import nn
 
 class LSTMContextualize(nn.Module):
-    def __init__(self, config, data, is_training=1):
+    def __init__(self, config, data):
         super().__init__()
         self.config = config
         self.data = data
@@ -14,7 +14,7 @@ class LSTMContextualize(nn.Module):
                         batch_first=True
                     )
 
-        self.dropout = nn.Dropout(1 - is_training * self.config['lstm_dropout_rate'])
+        self.dropout = nn.Dropout(1 - self.config['lstm_dropout_rate'])
 
 
     def forward(self, context_emb):

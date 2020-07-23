@@ -10,7 +10,7 @@ import torch
 
 # Names for the "given" tensors.
 _input_names = [
-    "tokens", "context_word_emb", "head_word_emb", "lm_emb", "char_idx", "text_len", "doc_id", "is_training"]
+    "tokens", "context_word_emb", "head_word_emb", "lm_emb", "char_idx", "text_len", "doc_id"]
 
 _label_names = [
     "ner_starts", "ner_ends", "ner_labels", "ner_len",
@@ -31,9 +31,9 @@ _predict_names = [
 class DocumentDataset():
     def __init__(self, config):
         self.config = config
-        self.lm_file = h5py.File(self.config["lm_path"], "r")
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
+        self.lm_file = h5py.File(config["lm_path"], "r")
         self.ner_labels = {l: i for i, l in enumerate([""] + config["ner_labels"])}
         self.ner_labels_inv = [""] + config["ner_labels"]
 
@@ -41,13 +41,6 @@ class DocumentDataset():
         self.label_names = _label_names
         self.predict_names = _predict_names
 
-
-        # self.graph_dataset = GraphDataset()
-        #
-        # self.data = {
-        #     "sentences": [],
-        #     "titles": []
-        # }
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
@@ -62,7 +55,6 @@ class DocumentDataset():
             ("text_len", data.RawField()),
             ("doc_id", data.RawField()),
             ("doc_key", data.RawField()),
-            ("is_training", data.RawField()),
             ("ner_starts", data.RawField()),
             ("ner_ends", data.RawField()),
             ("ner_labels", data.RawField()),
@@ -100,9 +92,15 @@ class DocumentDataset():
         self.char_dict = data_utils.load_char_dict(config["char_vocab_path"])
         self.dict_size = len(self.char_dict)
         self.examples = []
+        self.eval_examples = []
         self._load_data()
 
+        # Update lm_file to read the val data
+        self.lm_file = h5py.File(config["lm_path_dev"], "r")
+        self._load_eval_data()
+
         self.dataset = data.Dataset(self.examples, self.fields)
+        self.eval_dataset = data.Dataset(self.eval_examples, self.fields)
 
         self._build_vocab()
 
@@ -117,7 +115,69 @@ class DocumentDataset():
         return len(ex.text_len)
 
     def _load_data(self):
-        pass
+        with open(self.config["train_path"], "r", encoding='utf8') as f:
+            train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+
+        self.populate_sentence_offset(train_examples)
+
+        self._read_documents(train_examples)
+
+    def _load_eval_data(self):
+        #coref_eval_data = {}
+
+        # List of documents, each holds a list of sentences.
+        doc_examples = []
+        num_mentions = 0
+        num_sentences = 0
+        doc_count = 0
+        cluster_id_offset = 0
+
+        with open(self.config["eval_path"]) as f:
+            eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+
+        self.populate_sentence_offset(eval_examples)
+
+        for doc_id, document in enumerate(eval_examples, 1):
+            num_mentions_in_doc = 0
+            doc_examples.append([])
+
+            for example in self._split_document_example(document):
+                example["cluster_id_offset"] = cluster_id_offset
+                example["doc_id"] = doc_id
+                doc_examples[-1].append(example)
+                num_mentions_in_doc += len(example["coref"])
+                num_mentions += len(example["coref"])
+
+            assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
+
+            cluster_id_offset += len(document["clusters"])
+            num_sentences += len(doc_examples[-1])
+            doc_count += 1
+
+            #coref_eval_data[doc_id] = document
+
+        print("Loaded {} eval examples.".format(doc_count))
+
+        for doc_sentences in doc_examples:
+            doc_sentences_processed = []
+            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
+
+            # TODO title
+            title = 'Dummy title'
+
+            [doc_sentences_processed.append(self.tensorize_example(doc_sentence)) for doc_sentence in doc_sentences]
+
+            example = data.Example.fromlist(
+                (
+                    np.stack(np.array(doc_sentences_processed), 1).tolist()
+                ) + [
+                    title, len(doc_sentences_processed), out_text
+                ], self.fields)
+
+            self.eval_examples.append(example)
+
+        # TODO use later to sci-erc evaluation
+        #self.coref_eval_data = coref_eval_data
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
@@ -146,14 +206,12 @@ class DocumentDataset():
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            # TODO is_training should be class-level dynamic
-
             out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
 
             # TODO title
             title = 'Dummy title'
 
-            [doc_sentences_processed.append(self.tensorize_example(doc_sentence, is_training=True)) for doc_sentence in doc_sentences]
+            [doc_sentences_processed.append(self.tensorize_example(doc_sentence)) for doc_sentence in doc_sentences]
 
             example = data.Example.fromlist(
                 (
@@ -223,7 +281,7 @@ class DocumentDataset():
             # number of sentences
             sent_offset += len(example["sentences"])
 
-    def tensorize_example(self, example, is_training):
+    def tensorize_example(self, example):
         """
         Tensorize examples and cache embeddings.
         """
@@ -280,12 +338,11 @@ class DocumentDataset():
                 sentence, # words in sentence (words-in-sent)
                 context_word_emb, # words-in-sent x emb-size
                 head_word_emb, # words-in-sent x emb-size
-                lm_emb, # Lm embeddings for a sentence (words-in-sent x lm-size x lm-layers)
+                lm_emb, # Lm embeddings for a sentenfce (words-in-sent x lm-size x lm-layers)
                 char_index, # words-in-sent x max-word-length
                 text_len,
                 example["doc_id"],
                 example["doc_key"],
-                is_training,
 
                 # Labels.
                 ner_starts - word_offset,
@@ -347,51 +404,54 @@ class DocumentDataset():
         #         self.out.vocab.itos.append(s)
         #         self.out.vocab.stoi[s] = len(self.out.vocab.itos)
 
-class TrainDataset(DocumentDataset):
-    def _load_data(self):
-        with open(self.config["train_path"], "r", encoding='utf8') as f:
-            train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+# class TrainDataset(DocumentDataset):
+#     def __init__(self, config):
+#         self.lm_file = h5py.File(config["lm_path"], "r")
+#         super(TrainDataset, self).__init__(config)
+#
+#     def _load_data(self):
+#         with open(self.config["train_path"], "r", encoding='utf8') as f:
+#             train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+#
+#         self.populate_sentence_offset(train_examples)
+#
+#         self._read_documents(train_examples)
 
-        self.populate_sentence_offset(train_examples)
 
-        self._read_documents(train_examples)
-
-        # self.graph_dataset.build_vocab(self.data)
-
-
-class EvalDataset(DocumentDataset):
-    def __init__(self, **kwargs):
-        self.eval_data = None
-        self.coref_eval_data = None
-        super(EvalDataset, self).__init__(**kwargs)
-
-    def _load_data(self):
-        eval_data = {}
-        coref_eval_data = {}
-
-        with open(self.config["eval_path"]) as f:
-            eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
-
-        self.populate_sentence_offset(eval_examples)
-
-        for doc_id, document in enumerate(eval_examples,1):
-            num_mentions_in_doc = 0
-
-            for example in self._split_document_example(document):
-                # Because each batch=1 document at test time, we do not need to offset cluster ids.
-                example["cluster_id_offset"] = 0
-                example["doc_id"] = doc_id
-                self.tensorize_example(example, is_training=False)
-                num_mentions_in_doc += len(example["coref"])
-
-            assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
-
-            eval_data[doc_id] = data_utils.split_example_for_eval(document)
-            coref_eval_data[doc_id] = document
-
-        print("Loaded {} eval examples.".format(len(eval_data)))
-        self.eval_data = eval_data
-        self.coref_eval_data = coref_eval_data
+# class EvalDataset(DocumentDataset):
+#     def __init__(self, config):
+#         self.lm_file = h5py.File(config["lm_path_dev"], "r")
+#         self.eval_data = None
+#         self.coref_eval_data = None
+#         super(EvalDataset, self).__init__(config)
+#
+#     def _load_data(self):
+#         eval_data = {}
+#         coref_eval_data = {}
+#
+#         with open(self.config["eval_path"]) as f:
+#             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+#
+#         self.populate_sentence_offset(eval_examples)
+#
+#         for doc_id, document in enumerate(eval_examples,1):
+#             num_mentions_in_doc = 0
+#
+#             for example in self._split_document_example(document):
+#                 # Because each batch=1 document at test time, we do not need to offset cluster ids.
+#                 example["cluster_id_offset"] = 0
+#                 example["doc_id"] = doc_id
+#                 self.tensorize_example(example)
+#                 num_mentions_in_doc += len(example["coref"])
+#
+#             assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
+#
+#             eval_data[doc_id] = data_utils.split_example_for_eval(document)
+#             coref_eval_data[doc_id] = document
+#
+#         print("Loaded {} eval examples.".format(len(eval_data)))
+#         self.eval_data = eval_data
+#         self.coref_eval_data = coref_eval_data
 
 # TODO Is it ok to skip the entity indicators in the out
 # class GraphDataset(data.Dataset):

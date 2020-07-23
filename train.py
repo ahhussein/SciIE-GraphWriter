@@ -2,7 +2,7 @@ import sys
 import os
 import util
 from torchtext import data
-from document_dataset import TrainDataset, EvalDataset
+from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from torch.nn import functional as F
@@ -44,11 +44,7 @@ def main(args):
     # Writer will output to ./runs/ directory by default
     writer = SummaryWriter(log_dir=config['log_dir'])
 
-    # TODO test data set
-    dataset_wrapper = TrainDataset(config)
-
-    # TODO compoare eval dataset to train dataset
-    eval_dataset = EvalDataset(config)
+    dataset_wrapper = DocumentDataset(config)
 
     # Graph writer arguments
     args = dynArgs(args)
@@ -66,16 +62,16 @@ def main(args):
         dataset_wrapper.dataset,
         config.batch_size,
         # device=args.device,
-        sort_key=lambda x: len(x['text_len']),
+        sort_key=lambda x: len(x.text_len),
         repeat=False,
         train=True
     )
 
     val_iter = data.Iterator(
-        eval_dataset,
+        dataset_wrapper.eval_dataset,
         config.batch_size,
         # device=args.device,
-        sort_key=lambda x: len(x['text_len']),
+        sort_key=lambda x: len(x.text_len),
         repeat=False,
         train=False
     )
@@ -108,7 +104,7 @@ def main(args):
         val_loss, val_sci_loss, val_gr_loss = evaluate(
             model,
             graph_model,
-            eval_dataset,
+            dataset_wrapper,
             optimizer,
             writer,
             val_iter,
@@ -131,7 +127,7 @@ def main(args):
         )
 
         torch.save(
-            model.state_dict(),
+            graph_model.state_dict(),
             f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
         )
 
@@ -206,26 +202,26 @@ def evaluate(model, graph_model, dataset, optimizer, writer, data_iter, device, 
     gr_loss = 0
     count = 1
     for count, batch in enumerate(data_iter):
-        batch = dataset.fix_batch(batch)
+        with torch.no_grad():
+            batch = dataset.fix_batch(batch)
 
-        predict_dict, sci_loss = model(batch)
+            predict_dict, sci_loss = model(batch)
 
-        p, planlogits = graph_model(batch)
+            p, planlogits = graph_model(batch)
 
-        p = p[:, :-1, :].contiguous()
+            p = p[:, :-1, :].contiguous()
 
-        tgt = batch.out[0][:, 1:].contiguous().view(-1).to(device)
+            tgt = batch.out[0][:, 1:].contiguous().view(-1).to(device)
 
-        gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
+            gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
 
-        total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
+            total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
 
-        l += total_loss.item() * len(batch.doc_len)
+            l += total_loss.item() * len(batch.doc_len)
 
-        ex += len(batch.doc_len)
+            ex += len(batch.doc_len)
 
     # Summarize results
-
     model.train()
     graph_model.train()
 
