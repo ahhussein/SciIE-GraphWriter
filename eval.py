@@ -4,9 +4,9 @@ import collections
 import sys
 
 sys.path.append('./pycocoevalcap')
-from pycocoevalcap.bleu.bleu import Bleu
-from pycocoevalcap.rouge.rouge import Rouge
-from pycocoevalcap.meteor.meteor import Meteor
+from GraphWriter.pycocoevalcap.bleu.bleu import Bleu
+from GraphWriter.pycocoevalcap.rouge.rouge import Rouge
+from GraphWriter.pycocoevalcap.meteor.meteor import Meteor
 #from pycocoevalcap.cider.cider import Cider
 
 class Evaluate(object):
@@ -18,7 +18,7 @@ class Evaluate(object):
         ]#,        (Cider(), "CIDEr")
 
     def convert(self, data):
-        if isinstance(data, basestring):
+        if isinstance(data, str):
             return data.encode('utf-8')
         elif isinstance(data, collections.Mapping):
             return dict(map(convert, data.items()))

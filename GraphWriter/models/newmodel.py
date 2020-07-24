@@ -9,7 +9,9 @@ from GraphWriter.models.splan import splanner
 class model(nn.Module):
   def __init__(self,args, config):
     super().__init__()
+    super().__init__()
     self.args = args
+    self.args.ntoks = config.ntoks
     cattimes = 3 if args.title else 2
 
     self.emb = nn.Embedding(config.ntoks,args.hsz)
@@ -80,6 +82,7 @@ class model(nn.Module):
     # B x hz
     cx = hx.clone().detach().requires_grad_(True)
     a = torch.zeros_like(hx) #self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
+
     if self.args.title:
       # Attend last entity of each sample graph to each word in sentence in the title
       # B x hz
@@ -154,11 +157,12 @@ class model(nn.Module):
     if self.args.title:
       tencs,_ = self.tenc(b.src)
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
-    ents = b.ent
-    entlens = ents[2]
-    ents = self.le(ents)
+    ents = b.top_spans
+    entlens = b.doc_num_entities
+
     if self.graph:
-      gents,glob,grels = self.ge(b.rel[0],b.rel[1],(ents,entlens))
+      gents,glob,grels = self.ge(b.adj,b.rels,(b.top_spans,b.doc_num_entities))
+
       hx = glob
       #hx = ents.max(dim=1)[0]
       keys,mask = grels
@@ -184,14 +188,18 @@ class model(nn.Module):
 
     cx = hx.clone().detach().requires_grad_(True)
     a = self.attn(hx.unsqueeze(1),keys,mask=mask).squeeze(1)
+
     if self.args.title:
       a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)
       a = torch.cat((a,a2),1)
     outputs = []
-    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok).cuda()
+
+    # TODO ensure that this represents the number of documents
+    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
     beam = None
     for i in range(self.maxlen):
-      op = self.emb_w_vertex(outp.clone(),b.nerd)
+      # TODO nerd
+      op = self.emb_w_vertex(outp.clone(),None)
       if self.args.plan:
         schange = op==self.args.dottok
         if schange.nonzero().size(0)>0:
@@ -211,15 +219,17 @@ class model(nn.Module):
         #a =  a + (self.mix(hx)*a2)
         a = torch.cat((a,a2),1)
       l = torch.cat((hx,a),1).unsqueeze(1)
-      s = torch.sigmoid(self.switch(l))
+      #s = torch.sigmoid(self.switch(l))
       o = self.out(l)
       o = torch.softmax(o,2)
-      o = s*o
+
+      # TODO copy
+      #o = s*o
       #compute copy attn
-      _, z = self.mattn(l,(ents,entlens))
+      #_, z = self.mattn(l,(ents,entlens))
       #z = torch.softmax(z,2)
-      z = (1-s)*z
-      o = torch.cat((o,z),2)
+      #z = (1-s)*z
+      #o = torch.cat((o,z),2)
       o[:,:,0].fill_(0)
       o[:,:,1].fill_(0)
       '''

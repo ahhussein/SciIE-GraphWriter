@@ -29,7 +29,7 @@ _predict_names = [
 ]
 
 class DocumentDataset():
-    def __init__(self, config):
+    def __init__(self, config, is_eval = False):
         self.config = config
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
@@ -93,14 +93,22 @@ class DocumentDataset():
         self.dict_size = len(self.char_dict)
         self.examples = []
         self.eval_examples = []
+
         self._load_data()
 
-        # Update lm_file to read the val data
-        self.lm_file = h5py.File(config["lm_path_dev"], "r")
-        self._load_eval_data()
-
         self.dataset = data.Dataset(self.examples, self.fields)
-        self.eval_dataset = data.Dataset(self.eval_examples, self.fields)
+
+        # If eval, don't load data. Just build the vocab
+        if not is_eval:
+            # Update lm_file to read the val data
+            self.lm_file = h5py.File(config["lm_path_dev"], "r")
+            self._load_eval_data()
+            self.val_dataset = data.Dataset(self.eval_examples, self.fields)
+
+        if is_eval:
+            self.lm_file = h5py.File(config["lm_path_test"], "r")
+            self._load_test_data()
+            self.test_dataset = data.Dataset(self.eval_examples, self.fields)
 
         self._build_vocab()
 
@@ -178,6 +186,54 @@ class DocumentDataset():
 
         # TODO use later to sci-erc evaluation
         #self.coref_eval_data = coref_eval_data
+
+    def _load_test_data(self):
+        # List of documents, each holds a list of sentences.
+        doc_examples = []
+        num_mentions = 0
+        num_sentences = 0
+        doc_count = 0
+        cluster_id_offset = 0
+
+        with open(self.config["test_path"]) as f:
+            eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
+
+        self.populate_sentence_offset(eval_examples)
+
+        for doc_id, document in enumerate(eval_examples, 1):
+            doc_examples.append([])
+
+            for example in self._split_document_example(document):
+                example["cluster_id_offset"] = cluster_id_offset
+                example["doc_id"] = doc_id
+                doc_examples[-1].append(example)
+                num_mentions += len(example["coref"])
+
+            cluster_id_offset += len(document["clusters"])
+            num_sentences += len(doc_examples[-1])
+            doc_count += 1
+
+            #coref_eval_data[doc_id] = document
+
+        print("Loaded {} eval examples.".format(doc_count))
+
+        for doc_sentences in doc_examples:
+            doc_sentences_processed = []
+            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
+
+            # TODO title
+            title = 'Dummy title'
+
+            [doc_sentences_processed.append(self.tensorize_example(doc_sentence)) for doc_sentence in doc_sentences]
+
+            example = data.Example.fromlist(
+                (
+                    np.stack(np.array(doc_sentences_processed), 1).tolist()
+                ) + [
+                    title, len(doc_sentences_processed), out_text
+                ], self.fields)
+
+            self.eval_examples.append(example)
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
@@ -404,104 +460,15 @@ class DocumentDataset():
         #         self.out.vocab.itos.append(s)
         #         self.out.vocab.stoi[s] = len(self.out.vocab.itos)
 
-# class TrainDataset(DocumentDataset):
-#     def __init__(self, config):
-#         self.lm_file = h5py.File(config["lm_path"], "r")
-#         super(TrainDataset, self).__init__(config)
-#
-#     def _load_data(self):
-#         with open(self.config["train_path"], "r", encoding='utf8') as f:
-#             train_examples = [json.loads(jsonline) for jsonline in f.readlines()]
-#
-#         self.populate_sentence_offset(train_examples)
-#
-#         self._read_documents(train_examples)
+    def reverse(self, x, ents):
+        # TODO, ents
+        #ents = ents[0]
+        vocab = self.out.vocab
+        s = ' '.join(
+            [vocab.itos[y] if y < len(vocab.itos) else 0 for j, y in enumerate(x)])
 
-
-# class EvalDataset(DocumentDataset):
-#     def __init__(self, config):
-#         self.lm_file = h5py.File(config["lm_path_dev"], "r")
-#         self.eval_data = None
-#         self.coref_eval_data = None
-#         super(EvalDataset, self).__init__(config)
-#
-#     def _load_data(self):
-#         eval_data = {}
-#         coref_eval_data = {}
-#
-#         with open(self.config["eval_path"]) as f:
-#             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
-#
-#         self.populate_sentence_offset(eval_examples)
-#
-#         for doc_id, document in enumerate(eval_examples,1):
-#             num_mentions_in_doc = 0
-#
-#             for example in self._split_document_example(document):
-#                 # Because each batch=1 document at test time, we do not need to offset cluster ids.
-#                 example["cluster_id_offset"] = 0
-#                 example["doc_id"] = doc_id
-#                 self.tensorize_example(example)
-#                 num_mentions_in_doc += len(example["coref"])
-#
-#             assert num_mentions_in_doc == len(util.flatten(document["clusters"]))
-#
-#             eval_data[doc_id] = data_utils.split_example_for_eval(document)
-#             coref_eval_data[doc_id] = document
-#
-#         print("Loaded {} eval examples.".format(len(eval_data)))
-#         self.eval_data = eval_data
-#         self.coref_eval_data = coref_eval_data
-
-# TODO Is it ok to skip the entity indicators in the out
-# class GraphDataset(data.Dataset):
-#     def __init__(self):
-#         self.src = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
-#         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
-#         # self.nerd = data.Field(sequential=True, batch_first=True, eos_token="<eos>")
-#
-#         self.fields = [
-#             # title: e.g. Hierarchical Semantic Classification : Word Sense Disambiguation with World Knowledge
-#             ("src", self.src),
-#             # # extracted entities from abstract: e.g. task-specific and background data ; lexical semantic classification problems ; word sense disambiguation task ; hierarchical learning architecture ; task-specific training data ; background data ; learning architecture
-#             # ("ent", data.RawField()),
-#             # # extracted entity types: e.g. <material> <task> <task> <method> <material> <material> <method>
-#             # ("nerd", self.nerd),
-#             # # relation between entities (0 based): e.g. 6 0 1
-#             # ("rel", data.RawField()),
-#             # Processed Abstract: e.g. we present a <method_6> for <task_1> that supplements <material_4> with <material_5> encoding general '' world knowledge '' . the <method_6> compiles knowledge contained in a dictionary-ontology into additional training data ,
-#             # and integrates <material_0> through a novel <method_3> . experiments on a <task_2> provide empirical evidence that this '' <method_3> '' outperforms a state-of-the-art standard '' flat '' one .
-#             ("out", self.out),
-#             # # token order: e.g. 6 1 4 5 8 7 -1 0 3 7 -1 2 7 -1 (not yet clear)
-#             # ("sorder", data.RawField()),
-#             # # TODO Evaluation
-#             # ("tgt", data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>"))
-#         ]
-#
-#         self.examples = []
-#
-#         super(GraphDataset, self).__init__(self.examples, self.fields)
-#
-#     def build_vocab(self, examples):
-#         self.src.build_vocab(examples['titles'], min_freq=5)
-#         self.nerd.build_vocab([])
-#         self.out.build_vocab(examples['sentences'], min_freq=5)
-#
-#         # Extend the outpt vocab to contain these tokens
-#         generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
-#         self.out.vocab.itos.extend(generics)
-#         for x in generics:
-#             self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
-#
-#         # Extend target to include all the entity types with numbers up to 40
-#         specials = "method material otherscientificterm metric task".split(" ")
-#         for x in specials:
-#             for y in range(40):
-#                 s = "<" + x + "_" + str(y) + ">"
-#                 self.out.vocab.itos.append(s)
-#                 self.out.vocab.stoi[s] = len(self.out.vocab.itos)
-#
-#         self.nerd.vocab.itos.extend(generics)
-#         for x in generics:
-#             self.nerd.vocab.stoi[x] = self.out.vocab.stoi[x]
-#
+        #s = ' '.join(
+        #    [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
+        # s = ' '.join([vocab.itos[y] if y<len(vocab.itos) else ents[y-len(vocab.itos)] for j,y in enumerate(x)])
+        if "<eos>" in s: s = s.split("<eos>")[0]
+        return s

@@ -41,7 +41,6 @@ def main(args):
 
     util.set_gpus(0)
 
-    # Writer will output to ./runs/ directory by default
     writer = SummaryWriter(log_dir=config['log_dir'])
 
     dataset_wrapper = DocumentDataset(config)
@@ -50,13 +49,10 @@ def main(args):
     args = dynArgs(args)
     graph_model = graph(args, dataset_wrapper.config)
 
-    # TODO is training
     model = Model(config, dataset_wrapper)
 
     # Move models to gpu?
     # m = MODEL.to(args.device)
-
-    # TODO early stopping?
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
@@ -68,7 +64,7 @@ def main(args):
     )
 
     val_iter = data.Iterator(
-        dataset_wrapper.eval_dataset,
+        dataset_wrapper.val_dataset,
         config.batch_size,
         # device=args.device,
         sort_key=lambda x: len(x.text_len),
