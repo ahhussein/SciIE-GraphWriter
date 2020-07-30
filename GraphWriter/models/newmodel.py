@@ -193,9 +193,7 @@ class model(nn.Module):
       a2 = self.attn2(hx.unsqueeze(1),tencs,mask=tmask).squeeze(1)
       a = torch.cat((a,a2),1)
     outputs = []
-
-    # TODO ensure that this represents the number of documents
-    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
+    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok).cuda()
     beam = None
     for i in range(self.maxlen):
       # TODO nerd
