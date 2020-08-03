@@ -43,7 +43,7 @@ def main(args):
 
     writer = SummaryWriter(log_dir=config['log_dir'])
     args = dynArgs(args)
-
+    config.device = args.device
     dataset_wrapper = DocumentDataset(config, args)
 
     # Graph writer arguments

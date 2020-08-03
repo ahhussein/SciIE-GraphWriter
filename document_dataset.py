@@ -430,7 +430,8 @@ class DocumentDataset():
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
             if convert_tensor:
-                getattr(batch, field).to(self.args.device)
+                setattr(batch, field, getattr(batch, field).to(self.args.device))
+        print(self.args.device)
         batch.doc_len = torch.tensor(batch.doc_len)
         batch.ner_starts = batch.ner_starts.type(torch.int64)
         batch.ner_ends = batch.ner_ends.type(torch.int64)
