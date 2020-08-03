@@ -145,10 +145,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
     for count, batch in enumerate(data_iter):
         torch.cuda.empty_cache()
-        print(torch.cuda.memory_summary(device=device))
-
-        batch = dataset.fix_batch(batch)
         print("training sci batch")
+        print(torch.cuda.memory_summary(device=device))
+        print(f"Batch text length: {batch.text_len}")
+        batch = dataset.fix_batch(batch)
         predict_dict, sci_loss = model(batch)
         print("training graph batch")
 
