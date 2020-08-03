@@ -42,17 +42,18 @@ def main(args):
     util.set_gpus(0)
 
     writer = SummaryWriter(log_dir=config['log_dir'])
+    args = dynArgs(args)
 
-    dataset_wrapper = DocumentDataset(config)
+    dataset_wrapper = DocumentDataset(config, args)
 
     # Graph writer arguments
-    args = dynArgs(args)
+    print(args.device)
     graph_model = graph(args, dataset_wrapper.config)
+    graph_model = graph_model.to(args.device)
 
     model = Model(config, dataset_wrapper)
-
     # Move models to gpu?
-    # m = MODEL.to(args.device)
+    model = model.to(args.device)
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
@@ -141,10 +142,12 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     ex = 0
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
-
+        print("training sci batch")
         predict_dict, sci_loss = model(batch)
+        print("training graph batch")
 
         p, planlogits = graph_model(batch)
+        print("done training batch")
 
         p = p[:, :-1, :].contiguous()
 
@@ -171,9 +174,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         # Summarize results
         step = count + offset
-        writer.add_scalar('train/sci_loss/batch', sci_loss, step)
-        writer.add_scalar('train/gr_loss/batch', gr_loss, step)
-        writer.add_scalar('train/total/batch', total_loss, step)
+        writer.add_scalar('t/sci_loss/batch', sci_loss, step)
+        writer.add_scalar('t/gr_loss/batch', gr_loss, step)
+        writer.add_scalar('t/total/batch', total_loss, step)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
@@ -200,7 +203,6 @@ def evaluate(model, graph_model, dataset, optimizer, writer, data_iter, device, 
     for count, batch in enumerate(data_iter):
         with torch.no_grad():
             batch = dataset.fix_batch(batch)
-
             predict_dict, sci_loss = model(batch)
 
             p, planlogits = graph_model(batch)

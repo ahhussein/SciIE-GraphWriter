@@ -6,15 +6,11 @@ class CharEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         self.data = data
-        self.cnns= []
-        for filter_width in self.config['filter_widths']:
-            self.cnns.append(
-                nn.Conv1d(
+        self.cnns= nn.ModuleList(nn.Conv1d(
                     self.config['char_embedding_size'],
                     config['filter_size'],
                     filter_width
-                )
-            )
+                ) for filter_width in self.config['filter_widths'])
 
         emb = torch.empty(data.dict_size, data.char_embedding_size)
 

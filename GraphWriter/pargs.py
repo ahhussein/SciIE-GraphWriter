@@ -99,8 +99,8 @@ def pargs():
   args = parser.parse_args()
   if args.gpu == -1:
     args.gpu = 'cpu'
-  #args.device = torch.device(args.gpu)
-  args.device = 'cpu'
+  args.device = torch.device(args.gpu)
+  #args.device = 'cpu'
   #args.options_file = "../elmo/elmo_2x2048_256_2048cnn_1xhighway_options.json"
   #args.weight_file = "../elmo/elmo_2x2048_256_2048cnn_1xhighway_weights.hdf5"
 

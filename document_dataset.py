@@ -29,8 +29,9 @@ _predict_names = [
 ]
 
 class DocumentDataset():
-    def __init__(self, config, is_eval = False):
+    def __init__(self, config, args, is_eval = False):
         self.config = config
+        self.args = args
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
         self.lm_file = h5py.File(config["lm_path"], "r")
@@ -428,7 +429,8 @@ class DocumentDataset():
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
-
+            if convert_tensor:
+                getattr(batch, field).to(self.args.device)
         batch.doc_len = torch.tensor(batch.doc_len)
         batch.ner_starts = batch.ner_starts.type(torch.int64)
         batch.ner_ends = batch.ner_ends.type(torch.int64)
