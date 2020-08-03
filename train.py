@@ -145,7 +145,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
     for count, batch in enumerate(data_iter):
         torch.cuda.empty_cache()
-        print(f"GPU MEM: {get_gpu_memory_map()}")
+        print(torch.cuda.memory_summary(device=device))
 
         batch = dataset.fix_batch(batch)
         print("training sci batch")
