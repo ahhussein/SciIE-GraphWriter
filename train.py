@@ -10,6 +10,7 @@ from torch import nn
 from optimizers import MultipleOptimizer
 
 from torch.utils.tensorboard import SummaryWriter
+import subprocess
 
 # Graph Writer modules
 from GraphWriter.models.newmodel import model as graph
@@ -144,6 +145,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
     for count, batch in enumerate(data_iter):
         torch.cuda.empty_cache()
+        print(f"GPU MEM: {get_gpu_memory_map()}")
 
         batch = dataset.fix_batch(batch)
         print("training sci batch")
@@ -231,6 +233,15 @@ def evaluate(model, graph_model, dataset, optimizer, writer, data_iter, device, 
 
     return l / ex, sci_loss / count, gr_loss / count
 
+
+def get_gpu_memory_map():
+    result = subprocess.check_output(
+        [
+            'nvidia-smi', '--query-gpu=memory.used',
+            '--format=csv,nounits,noheader'
+        ])
+
+    return float(result)
 
 if __name__ == "__main__":
     args = pargs()
