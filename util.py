@@ -397,7 +397,15 @@ def print_range(text, i, j):
         print(f"{text[i]} ", end='')
         i = i + 1
 
-
 def printexit(x):
     print(x)
     exit()
+
+def index(a_list, value):
+    idx = (a_list == value).nonzero()
+
+    if not idx.shape[0]:
+        return None
+
+    return idx.item()
+

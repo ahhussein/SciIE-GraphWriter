@@ -23,7 +23,9 @@ class Model(nn.Module):
 
         # TODO get the length dynamically
         # TODO investigate the no-relation link
-        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 1, 500)
+        self.rel_embs = nn.Embedding(len(self.data.rel_labels) + 2, 500)
+
+        # TODO try without project
         self.emb_projection = nn.Linear(1270, 500)
 
     def forward(self, batch):
@@ -136,8 +138,18 @@ class Model(nn.Module):
 
             entities_mask = util.sequence_mask(num_entities, entity_emb.shape[1]).view(-1)
 
-            # Top spans of interest (to be passed to graphwriter)
-            top_spans = entity_emb.view(entity_emb.shape[0] * entity_emb.shape[1], -1)[entities_mask]
+            top_span_indices_rels = entity_span_indices.view(-1)[entities_mask]
+
+            doc_lens = []
+            offset = 0
+            doc2idx = {}
+            for count, dlen in enumerate(batch.doc_len):
+                doc_lens.append(sum(num_entities[offset:offset + dlen]))
+                doc2idx[batch.doc_id[offset].item()] = count
+                offset += dlen
+
+            # Split span ids
+            top_span_indices_rels = list(top_span_indices_rels.split(doc_lens))
 
         # Get coref representations.
         if self.config["coref_weight"] > 0:
@@ -174,6 +186,22 @@ class Model(nn.Module):
             mention_scores = candidate_mention_scores[top_mention_indices]  # [k]
             mention_emb = candidate_span_emb[top_mention_indices]  # [k, emb]
             mention_doc_ids = candidate_doc_ids[top_mention_indices]  # [k]
+
+            top_span_indices, mention_idx = self.append_mention_idx(
+                top_span_indices_rels,
+                doc2idx,
+                batch.doc_len,
+                top_mention_indices,
+                mention_doc_ids
+            )
+
+            #ent_coref_lens = [len(item) for item in top_span_indices]
+
+            # Top spans of interest (to be passed to graphwriter)
+            top_spans = candidate_span_emb[torch.cat(top_span_indices, 0)]
+
+            num_doc_entities = [len(x) for x in top_span_indices]
+
 
             if head_scores is not None:
                 predict_dict["coref_head_scores"] = head_scores
@@ -249,14 +277,20 @@ class Model(nn.Module):
             masked_flattened_scores = flattened_scores[rel_loss_mask.view(-1)].view(-1)
 
             # Build graphs per document
-            batch.adj, rel_lengths = self.build_graphs(batch, num_entities, rel_scores, masked_flattened_scores)
+            batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores, masked_flattened_scores, num_doc_entities, mention_idx, antecedent_scores, antecedent_mask)
 
             # Rel embeddings
             rel_indices = torch.arange(len(self.data.rel_labels)).repeat(
                 sum(num_entities * num_entities)
             )
 
-            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(top_spans, num_entities, rel_indices, rel_lengths, batch.doc_len)
+            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
+                top_spans,
+                num_doc_entities,
+                rel_indices,
+                rel_lengths,
+                coref_lengths
+            )
 
             # TODO figure how to append mentions
             # TODO train without mention
@@ -334,15 +368,24 @@ class Model(nn.Module):
 
         return predict_dict, loss
 
-    def build_graphs(self, batch, num_entities, rel_scores, masked_flattened_scores):
+    def build_graphs(self, batch, num_entities, rel_scores, masked_flattened_scores, num_doc_entities, mention_idx, antecedent_scores, antecedent_mask):
         # Holds adj matrix per document
         adj = []
         offset = 0
         scores_offset = 0
         doc_rel_ind_x = []
         rel_lengths = []
+        coref_lengths = []
+        coref_doc_offset = 0
+        coref_offset = 0
+        for idx, i in enumerate(batch.doc_len):
 
-        for i in batch.doc_len:
+            # Prepare mentions indices
+            entity_rel_indx, rel_entity_indy, coref_doc_offset, doc_coref_count = self.arrange_coref_scores_for_document(antecedent_mask, mention_idx[idx], coref_doc_offset)
+
+            doc_coref_entities_count = len(mention_idx[idx])
+
+            coref_lengths.append(doc_coref_count)
             doc_entities = num_entities[offset:offset + i]
 
             entities_scores_x_ind = torch.arange(sum(doc_entities)).repeat_interleave(
@@ -353,18 +396,24 @@ class Model(nn.Module):
 
             entities_scores_y_ind = torch.arange(entities_scores_x_ind.shape[0])
 
-            entities_rel_scores_arranged = torch.zeros(sum(doc_entities), sum(doc_entities * doc_entities) * 8)
-
+            dim_y_without_mentions = (sum(doc_entities * doc_entities) * 8)
+            entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx] , dim_y_without_mentions + doc_coref_count)
 
             entities_rel_scores_arranged[
                 (entities_scores_x_ind, entities_scores_y_ind)
-            ] = masked_flattened_scores[scores_offset:scores_offset +entities_rel_scores_arranged.shape[1]]
+            ] = masked_flattened_scores[scores_offset:scores_offset +dim_y_without_mentions]
+
+            # coref scores
+            entities_rel_scores_arranged[
+                (entity_rel_indx, torch.arange(start=dim_y_without_mentions, end=dim_y_without_mentions+doc_coref_count))
+            ] = antecedent_scores[coref_offset:coref_offset+doc_coref_entities_count,1:][antecedent_mask[coref_offset:coref_offset+doc_coref_entities_count,:]].view(-1)
 
             entities_adj = torch.diag(torch.ones(entities_rel_scores_arranged.shape[0]+1))
 
             # add global node
             entities_adj[entities_rel_scores_arranged.shape[0]:] = torch.ones(entities_rel_scores_arranged.shape[0]+1)
             entities_adj[:,entities_rel_scores_arranged.shape[0]] = torch.ones(entities_rel_scores_arranged.shape[0]+1)
+
 
             # Upper Graph
             graph_adj_upper = torch.cat([
@@ -388,14 +437,19 @@ class Model(nn.Module):
             doc_rel_ind_x_tensor = torch.cat(doc_rel_ind_x, 0)
             doc_rel_ind_y = torch.arange(doc_rel_ind_x_tensor.shape[0])
 
-            rel_lengths.append(doc_rel_ind_x_tensor.shape[0])
-
             # Build matrix for a document
-            rel_scores_rearranged = torch.zeros(entities_rel_scores_arranged.shape[1], sum(doc_entities))
+            rel_scores_rearranged = torch.zeros(entities_rel_scores_arranged.shape[1], entities_rel_scores_arranged.shape[0])
 
             rel_scores_rearranged[
                 (doc_rel_ind_y, doc_rel_ind_x_tensor)
-            ] = masked_flattened_scores[scores_offset: scores_offset + rel_scores_rearranged.shape[0]]
+            ] = masked_flattened_scores[scores_offset: scores_offset + dim_y_without_mentions]
+
+            # coref scores
+            rel_scores_rearranged[
+                (torch.arange(start=dim_y_without_mentions, end=dim_y_without_mentions+doc_coref_count), rel_entity_indy)
+            ] = antecedent_scores[coref_offset:coref_offset+doc_coref_entities_count,1:][antecedent_mask[coref_offset:coref_offset+doc_coref_entities_count,:]].view(-1)
+
+            rel_lengths.append(dim_y_without_mentions)
 
             graph_adj_lower = torch.cat(
                 (
@@ -412,21 +466,14 @@ class Model(nn.Module):
             # reset values for the next document
             doc_rel_ind_x = []
             offset += i
-            scores_offset += entities_rel_scores_arranged.shape[1]
+            scores_offset += dim_y_without_mentions
+            coref_offset += doc_coref_entities_count
 
-        return adj, rel_lengths
+        return adj, rel_lengths, coref_lengths
 
-    def prepare_adj_embs(self, top_spans, num_entities, rel_indices, rel_lengths, doc_len):
+    def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths):
         # Project entity embs to lower space
         top_spans = self.emb_projection(top_spans)
-
-        # Get document lengths
-        offset = 0
-        ent_len = []
-        for i in doc_len:
-            ent_len.append(sum(num_entities[offset: i + offset]))
-            offset += i
-
         # Max # entity per sample.
         m = max(ent_len)
 
@@ -439,16 +486,70 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
+        # coref rels
+        coref_rels = self.rel_embs.weight[
+            torch.tensor(
+                [len(self.data.rel_labels)]
+            ).repeat(sum(coref_lengths))
+        ].split(coref_lengths)
+
         rels_list = []
 
-        for rel in rels:
-            rels_list.append(torch.cat((self.rel_embs.weight[len(self.data.rel_labels)].unsqueeze(0), rel), 0))
+        for idx, rel in enumerate(rels):
+            rels_list.append(
+                torch.cat(
+                    (
+                        torch.cat((self.rel_embs.weight[len(self.data.rel_labels)+1].unsqueeze(0), rel), 0),
+                        coref_rels[idx]
+                ), 0)
+            )
 
         return out, rels_list, torch.tensor(ent_len)
 
 
-
     def pad(self, tensor, length):
         return torch.cat([tensor, tensor.new(length - tensor.size(0), *tensor.size()[1:]).fill_(0)])
+
+    def append_mention_idx(self, top_span_indices, doc2idx, doc_len, top_mention_indices, mention_doc_ids):
+        mention_idx = [[] for i in range(len(doc_len))]
+        #mention_new_entities = [0 for i in range(len(doc_len))]
+
+        top_span_indices = list(top_span_indices)
+
+        for idx, mention_doc_id in enumerate(mention_doc_ids):
+            doc_idx = doc2idx[mention_doc_id.item()]
+            mention_span_idx = top_mention_indices[idx]
+
+            span_idx = util.index(top_span_indices[doc_idx], mention_span_idx.item())
+
+            if span_idx:
+                mention_idx[doc_idx].append(span_idx)
+            else:
+                top_span_indices[doc_idx] = torch.cat((top_span_indices[doc_idx], torch.tensor([mention_span_idx])))
+                mention_idx[doc_idx].append(top_span_indices[doc_idx].shape[0] - 1)
+                #mention_new_entities[doc_idx] += 1
+        return top_span_indices, mention_idx
+
+    def arrange_coref_scores_for_document(self, antecedent_mask, mention_idx, doc_offset):
+        """
+        Arranges coref scores into indices ready to be integrated in the adjcancy matrix
+        """
+        doc_coref_count = 0
+        entity_rel_indx = []
+        rel_entity_indy = []
+        for idx, candidate in enumerate(mention_idx):
+            rels = len(antecedent_mask[doc_offset].nonzero())
+            entity_rel_indx += [item for item in [candidate] for i in range(rels)]
+            rel_entity_indy += [mention_idx[i] for i in range(rels)]
+            doc_coref_count += rels
+            doc_offset += 1
+
+        return  entity_rel_indx, rel_entity_indy, doc_offset, doc_coref_count
+
+
+
+
+
+
 
 
