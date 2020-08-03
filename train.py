@@ -85,6 +85,8 @@ def main(args):
 
     offset = 0
     for epoch in range(100):
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
         predict_dict, loss, offset = train(
             model,
             graph_model,
@@ -139,6 +141,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     print("Training", end="\t")
     l = 0
     ex = 0
+
     for count, batch in enumerate(data_iter):
         batch = dataset.fix_batch(batch)
 
@@ -153,9 +156,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
 
-        total_loss.backward()
+        optimizer.zero_grad()
 
-        l += total_loss.item() * len(batch.doc_len)
+        total_loss.backward()
 
         # gr_loss.backward()
 
@@ -164,16 +167,17 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         # loss += gr_loss.item() * len(batch.doc_len)
 
         optimizer.step()
-        optimizer.zero_grad()
+
+        l += total_loss.item() * len(batch.doc_len)
 
         # Number of documents
         ex += len(batch.doc_len)
 
         # Summarize results
         step = count + offset
-        writer.add_scalar('train/sci_loss/batch', sci_loss, step)
-        writer.add_scalar('train/gr_loss/batch', gr_loss, step)
-        writer.add_scalar('train/total/batch', total_loss, step)
+        writer.add_scalar('t/sci_loss/batch', sci_loss.item(), step)
+        writer.add_scalar('t/gr_loss/batch', gr_loss.item(), step)
+        writer.add_scalar('t/total/batch', total_loss.item(), step)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
@@ -211,9 +215,9 @@ def evaluate(model, graph_model, dataset, optimizer, writer, data_iter, device, 
 
             gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
 
-            total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
+            total_loss = config['graph_writer_weight'] * gr_loss.item() + config['scierc_weight'] * sci_loss.item()
 
-            l += total_loss.item() * len(batch.doc_len)
+            l += total_loss * len(batch.doc_len)
 
             ex += len(batch.doc_len)
 
