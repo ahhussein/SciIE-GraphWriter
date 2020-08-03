@@ -116,7 +116,7 @@ class graph_encode(nn.Module):
     gents = [self.pad(x,max(elens)) for x in graphs]
     # PAD graphs again!
     gents = torch.stack(gents,0)
-    elens = torch.LongTensor(elens)
+    elens = torch.LongTensor(elens).to(self.get_device())
     emask = torch.arange(0,gents.size(1)).unsqueeze(0).repeat(gents.size(0),1).long()
     # emask and vents should be in the same device. 
     emask = (emask <= elens.unsqueeze(1)).to(self.get_device())

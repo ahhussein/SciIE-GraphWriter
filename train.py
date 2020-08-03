@@ -86,6 +86,7 @@ def main(args):
 
     offset = 0
     for epoch in range(100):
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
         predict_dict, loss, offset = train(
             model,
             graph_model,

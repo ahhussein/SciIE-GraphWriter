@@ -140,6 +140,7 @@ def get_batch_topk(
         topk_ratio,
         text_len,
         max_sentence_length,
+        device,
         sort_spans=False,
         enforce_non_crossing=True
 ):
@@ -168,7 +169,7 @@ def get_batch_topk(
 
 
     # TODO why repeated indices?
-    predicted_indices = predicted_indices.type(torch.int64)
+    predicted_indices = predicted_indices.type(torch.int64).to(device)
     # get corresponding span starts and ends
     predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, pruned_num_candidates]
     predicted_ends = batch_gather(candidate_ends, predicted_indices)  # [num_sentences, pruned_num_candidates]

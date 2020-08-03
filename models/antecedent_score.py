@@ -47,7 +47,7 @@ class AntecedentScore(nn.Module):
             antecedent_distance_emb = self.antecedent_distance_emb[antecedent_distance_buckets] # [k, max_ant, emb]
             feature_emb_list.append(antecedent_distance_emb)
 
-        feature_emb = self.dropout(torch.cat(feature_emb_list, 2)) # [k, max_ant, emb]
+        feature_emb = self.dropout(torch.cat(feature_emb_list, 2)).to(self.config.device) # [k, max_ant, emb]
 
 
         # mentions are included in the mention_scores array since that array gives a score

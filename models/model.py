@@ -31,7 +31,6 @@ class Model(nn.Module):
     def forward(self, batch):
         # max sentence length in terms of number of words
         max_sentence_length = batch.char_idx.shape[1]
-
         # context_emb = [num_sentences, max_sentence_length, emb1]
         # head_emb    = [num_sentences, max_sentence_length, emb2]
         context_emb, head_emb, lm_weights, lm_scaling = self.embeddings(batch)
@@ -126,7 +125,7 @@ class Model(nn.Module):
             # top_entity_indices = [num_sentences, max_num_ents]
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
-                batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
+                batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False
             )
 
             # [num_sentences, max_num_ents]
