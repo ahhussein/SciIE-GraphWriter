@@ -408,5 +408,5 @@ def index(a_list, value):
     if not idx.shape[0]:
         return None
 
-    return idx.item()
+    return idx[0].item()
 

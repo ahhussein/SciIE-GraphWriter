@@ -291,7 +291,6 @@ class Model(nn.Module):
                 coref_lengths
             )
 
-            print(f"adj size: {batch.adj}")
             print(f"spans size: {batch.top_spans}")
 
             # TODO figure how to append mentions

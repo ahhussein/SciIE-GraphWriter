@@ -48,7 +48,6 @@ def main(args):
     dataset_wrapper = DocumentDataset(config, args)
 
     # Graph writer arguments
-    print(args.device)
     graph_model = graph(args, dataset_wrapper.config)
     graph_model = graph_model.to(args.device)
 
@@ -144,9 +143,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     ex = 0
 
     for count, batch in enumerate(data_iter):
-        torch.cuda.empty_cache()
-        print("training sci batch")
-        print(torch.cuda.memory_summary(device=device))
+        print("Training sci batch")
+        print(f"Reserved: {torch.cuda.memory_reserved(device=device)}")
+        print(f"Allocated: {torch.cuda.memory_allocated(device=device)}")
         print(f"Batch text length: {batch.text_len}")
         batch = dataset.fix_batch(batch)
         predict_dict, sci_loss = model(batch)
