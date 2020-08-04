@@ -262,8 +262,8 @@ class DocumentDataset():
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
-
+            #out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
+            out_text = self.build_out_text_for_document(doc_sentences)
             # TODO title
             title = 'Dummy title'
 
@@ -443,7 +443,14 @@ class DocumentDataset():
 
     def _build_vocab(self):
         self.title.build_vocab(self.dataset, min_freq=5)
+
+        # Extend the output vocab to contain these tokens (They exist in the original vocab but with numbers)
+        generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
         self.out.build_vocab(self.dataset, min_freq=5)
+        self.out.vocab.itos.extend(generics)
+        for x in generics:
+            self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
+
         self.config.ntoks = len(self.out.vocab)
 
         # # Extend the outpt vocab to contain these tokens
@@ -472,3 +479,44 @@ class DocumentDataset():
         # s = ' '.join([vocab.itos[y] if y<len(vocab.itos) else ents[y-len(vocab.itos)] for j,y in enumerate(x)])
         if "<eos>" in s: s = s.split("<eos>")[0]
         return s
+
+    def build_out_text_for_document(self, doc_sentences):
+        out_text = []
+        global_idx = -1
+        for sentence in doc_sentences:
+            current_ent = None
+            ner_pointer = 0
+            if sentence['ner']:
+                current_ent = (
+                    sentence['ner'][ner_pointer][0],
+                    sentence['ner'][ner_pointer][1],
+                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>"
+                )
+
+            for word in sentence['sentence']:
+                global_idx += 1
+
+                # Update current ent if necessary
+                if current_ent and global_idx > current_ent[1]:
+                    ner_pointer += 1
+
+                    if len(sentence['ner']) > ner_pointer:
+                        current_ent = (
+                            sentence['ner'][ner_pointer][0],
+                            sentence['ner'][ner_pointer][1],
+                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>"
+                        )
+                    else:
+                        current_ent = None
+
+                if not current_ent or global_idx < current_ent[0]:
+                    out_text.append(word)
+                    continue
+
+                if global_idx >= current_ent[0] and global_idx <= current_ent[1]:
+                    # If this marks the end word of the span, append the type here
+                    if global_idx == current_ent[1]:
+                        out_text.append(current_ent[2])
+                        continue
+
+        return out_text
