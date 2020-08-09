@@ -52,16 +52,17 @@ def main(args):
 
     if config['train_graph_for'] or config['train_both_for']:
         graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+        # Move models to gpu?
+        graph_model = graph_model.to(args.device)
+
     else:
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
         model = Model(config, dataset_wrapper)
+        model = model.to(args.device)
     else:
         model = None
-
-    # Move models to gpu?
-    model = model.to(args.device)
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
