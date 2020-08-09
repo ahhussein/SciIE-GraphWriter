@@ -441,7 +441,7 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out', 'adj', 'rels']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
