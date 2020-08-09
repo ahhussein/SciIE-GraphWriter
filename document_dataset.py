@@ -441,13 +441,17 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
+
+            if field == 'adj':
+                setattr(batch, field, getattr(batch, field).to(self.args.device))
+
             if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
             if convert_tensor:
                 setattr(batch, field, getattr(batch, field).to(self.args.device))
-        print(self.args.device)
+
         batch.doc_len = torch.tensor(batch.doc_len)
         batch.ner_starts = batch.ner_starts.type(torch.int64)
         batch.ner_ends = batch.ner_ends.type(torch.int64)
