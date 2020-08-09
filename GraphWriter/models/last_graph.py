@@ -66,6 +66,7 @@ class graph_encode(nn.Module):
     glob = []
     graphs = []
     for i,adj in enumerate(adjs):
+      adj = adj.to(self.get_device())
       # PRocess sample by sample
       #  num of entities in a sample + num of relations in a sample X hs
       # DISCARD PADDING

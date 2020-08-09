@@ -442,9 +442,6 @@ class DocumentDataset():
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
 
-            if field == 'adj':
-                setattr(batch, field, getattr(batch, field).to(self.args.device))
-
             if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt']:
                 continue
 
