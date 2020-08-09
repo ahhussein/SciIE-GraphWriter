@@ -217,7 +217,6 @@ def get_span_candidates(text_len, max_sentence_len, max_mention_width):
 
     return candidate_starts, candidate_ends, candidate_mask
 
-
 def get_span_task_labels(arg_starts, arg_ends, batch, max_sentence_length):
     """
         Get dense labels for NER/Constituents (unary span prediction tasks).

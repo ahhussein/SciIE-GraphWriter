@@ -3,13 +3,21 @@ import torch
 import util
 
 class SpanEmbeddings(nn.Module):
-    def __init__(self, config, data):
+    def __init__(self, config, data, read_gt = False):
         super().__init__()
         self.config = config
         self.data = data
 
         # Embeddings for span widths
-        emb = torch.empty(self.config['max_arg_width'], self.config['feature_size'])
+        self.max_width = self.config['max_arg_width']
+
+        if read_gt:
+            self.max_width = self.config['max_arg_width']+5
+        else:
+            self.max_width = self.config['max_arg_width']
+
+        emb = torch.empty(self.max_width, self.config['feature_size'])
+
         nn.init.xavier_uniform_(emb)
         self.embeddings = nn.Parameter(emb)
 
@@ -42,7 +50,7 @@ class SpanEmbeddings(nn.Module):
 
         # [num-spans]
         span_widths = 1 + span_ends - span_starts
-        max_arg_width = self.config['max_arg_width']
+        max_arg_width = self.max_width
 
         if self.config["use_features"]:
             span_width_index = span_widths - 1
@@ -98,7 +106,7 @@ class UnaryScores(nn.Module):
         super().__init__()
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 
@@ -146,7 +154,7 @@ class RelScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270 * 3, #TODO
+            500 * 3, #TODO
             self.config["ffnn_size"]
         )
 
@@ -234,7 +242,7 @@ class NerScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 

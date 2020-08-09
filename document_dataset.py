@@ -5,6 +5,8 @@ import util
 import data_utils
 import random
 import h5py
+from copy import copy
+
 
 import torch
 
@@ -44,6 +46,7 @@ class DocumentDataset():
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
+        self.tgt = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>")
 
         # Fields declaration
         self.fields = [
@@ -71,14 +74,20 @@ class DocumentDataset():
             ("rel_len", data.RawField()),
             ("title", self.title),
             ("doc_len", data.RawField()),
-            ('out', self.out)
+            ("out", self.out),
+            ("tgt", self.tgt),
+            ("adj", data.RawField()),
+            ("rels", data.RawField())
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
         if config["filter_reverse_relations"]:
             self.rel_labels_inv = [r for r in self.rel_labels_inv if "REVERSE" not in r]
 
+        self.extended_rel_labels_inv = self.rel_labels_inv + ['MERGE', 'ROOT']
+
         self.rel_labels = {l: i for i, l in enumerate(self.rel_labels_inv)}
+        self.rel_labels_extended = {l: i for i, l in enumerate(self.extended_rel_labels_inv)}
 
         # TODO Understand the difference between the two glove files
         self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"])
@@ -262,19 +271,26 @@ class DocumentDataset():
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            #out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
-            out_text = self.build_out_text_for_document(doc_sentences)
+            # TODO tgt
             # TODO title
             title = 'Dummy title'
 
             [doc_sentences_processed.append(self.tensorize_example(doc_sentence)) for doc_sentence in doc_sentences]
-
             example = data.Example.fromlist(
                 (
                     np.stack(np.array(doc_sentences_processed),1).tolist()
                 ) + [
-                    title, len(doc_sentences_processed), out_text
+                    title, len(doc_sentences_processed),
                 ]  , self.fields)
+
+            adj, rel, entities2idx = self.mkGraph(example)
+
+            out_text, tgt_text = self.build_out_text_for_document(doc_sentences, entities2idx)
+
+            example.out = out_text
+            example.tgt = tgt_text
+            example.adj = adj
+            example.rels = rel
 
             self.examples.append(example)
 
@@ -424,7 +440,7 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'rels']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
@@ -450,6 +466,17 @@ class DocumentDataset():
         self.out.vocab.itos.extend(generics)
         for x in generics:
             self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
+
+        self.tgt.vocab = copy(self.out.vocab)
+
+        # Extend target to include all the entity typs with numbers up to x
+        specials = "method material otherscientificterm metric task".split(" ")
+        # The size of the tgt vocab will still be the size without these specials
+        for x in specials:
+            for y in range(5000):
+                s = "<" + x + "_" + str(y) + ">"
+                # Change indices of those vocab
+                self.tgt.vocab.stoi[s] = len(self.tgt.vocab.itos) + y
 
         self.config.ntoks = len(self.out.vocab)
 
@@ -480,17 +507,23 @@ class DocumentDataset():
         if "<eos>" in s: s = s.split("<eos>")[0]
         return s
 
-    def build_out_text_for_document(self, doc_sentences):
+    def build_out_text_for_document(self, doc_sentences, entities2idx):
         out_text = []
+        tgt_text = []
         global_idx = -1
-        for sentence in doc_sentences:
+        for sent_idx, sentence in enumerate(doc_sentences):
             current_ent = None
             ner_pointer = 0
             if sentence['ner']:
+                entity_idx = entities2idx[
+                    f"{sentence['ner'][ner_pointer][0] - sentence['word_offset']}-{sentence['ner'][ner_pointer][1] - sentence['word_offset']}-{sent_idx}"
+                ]
+
                 current_ent = (
                     sentence['ner'][ner_pointer][0],
                     sentence['ner'][ner_pointer][1],
-                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>"
+                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>",
+                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}_{entity_idx}>"
                 )
 
             for word in sentence['sentence']:
@@ -501,22 +534,124 @@ class DocumentDataset():
                     ner_pointer += 1
 
                     if len(sentence['ner']) > ner_pointer:
+                        entity_idx = entities2idx[
+                            f"{sentence['ner'][ner_pointer][0] - sentence['word_offset']}-{sentence['ner'][ner_pointer][1] - sentence['word_offset']}-{sent_idx}"
+                        ]
+
                         current_ent = (
                             sentence['ner'][ner_pointer][0],
                             sentence['ner'][ner_pointer][1],
-                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>"
+                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>",
+                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}_{entity_idx}>"
                         )
                     else:
                         current_ent = None
 
                 if not current_ent or global_idx < current_ent[0]:
                     out_text.append(word)
+                    tgt_text.append(word)
                     continue
 
                 if global_idx >= current_ent[0] and global_idx <= current_ent[1]:
                     # If this marks the end word of the span, append the type here
                     if global_idx == current_ent[1]:
                         out_text.append(current_ent[2])
+                        tgt_text.append(current_ent[3])
                         continue
 
-        return out_text
+        return out_text, tgt_text
+
+    def mkGraph(self, example):
+        # Preprocess corefs
+        cluster2candidates = {}
+        for sent_idx in range(len(example.coref_cluster_ids)):
+            for list_idx, cluster_id in enumerate(example.coref_cluster_ids[sent_idx]):
+                cluster_id = cluster_id.item()
+                if cluster_id not in cluster2candidates:
+                    cluster2candidates[cluster_id] = []
+
+                cluster2candidates[cluster_id].append((
+                    example.coref_starts[sent_idx][list_idx],
+                    example.coref_ends[sent_idx][list_idx],
+                    sent_idx
+                ))
+
+        ent_len = sum(example.ner_len)
+        coref_len = sum([len(item) * (len(item)-1) for _, item in cluster2candidates.items()])
+
+        rel_len = sum(example.rel_len)
+        adjsize = ent_len + 1 + 2 * rel_len + coref_len
+        adj = torch.zeros(adjsize, adjsize)
+
+        rel = [self.rel_labels_extended['ROOT']]
+
+        # global node
+        for i in range(ent_len):
+            adj[i, ent_len] = 1
+            adj[ent_len, i] = 1
+
+        # Build dict for entities
+        entities2idx = {}
+        abs_index = 0
+        for sent_idx, sent_num_entities in enumerate(example.ner_len):
+            for ent_idx in range(sent_num_entities):
+                ent_start = example.ner_starts[sent_idx][ent_idx]
+                ent_end = example.ner_ends[sent_idx][ent_idx]
+                entities2idx[f"{ent_start}-{ent_end}-{sent_idx}"] = abs_index
+                abs_index += 1
+
+        # Self connection
+        for i in range(adjsize):
+            adj[i, i] = 1
+
+        # converting relations into nodes
+        for sent_idx, sent_num_rel in enumerate(example.rel_len):
+            for rel_idx in range(sent_num_rel):
+                # TODO fix indices
+                rel.extend([
+                    (example.rel_labels[sent_idx][rel_idx] + 1).item(),
+                    (example.rel_labels[sent_idx][rel_idx] + 1 + len(self.rel_labels_extended) - 1).item()
+                ])
+
+                first_ent_start = example.rel_e1_starts[sent_idx][rel_idx]
+                first_ent_end = example.rel_e1_ends[sent_idx][rel_idx]
+                second_ent_start = example.rel_e2_starts[sent_idx][rel_idx]
+                second_ent_end = example.rel_e2_ends[sent_idx][rel_idx]
+
+                a = entities2idx[f"{first_ent_start}-{first_ent_end}-{sent_idx}"]
+                b = entities2idx[f"{second_ent_start}-{second_ent_end}-{sent_idx}"]
+                c = ent_len + len(rel) - 2
+                d = ent_len + len(rel) - 1
+
+                adj[a, c] = 1
+                adj[c, b] = 1
+                adj[b, d] = 1
+                adj[d, a] = 1
+
+        for cluster, entities in cluster2candidates.items():
+            for idx, entity in enumerate(entities):
+                for idx2, entity2 in enumerate(entities):
+                    if idx == idx2:
+                        continue
+
+                    a = entities2idx[f"{entity[0]}-{entity[1]}-{entity[2]}"]
+                    b = entities2idx[f"{entity2[0]}-{entity2[1]}-{entity2[2]}"]
+
+                    if idx < idx2:
+                        rel.extend([
+                            self.rel_labels_extended['MERGE']
+                        ])
+
+                        c = ent_len + len(rel) - 1
+                    else:
+                        rel.extend([
+                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended) - 1
+                        ])
+
+                        c = ent_len + len(rel) - 1
+
+                    adj[a, c] = 1
+                    adj[c, b] = 1
+
+        return (adj, rel, entities2idx)
+
