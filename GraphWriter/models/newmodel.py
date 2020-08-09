@@ -5,10 +5,11 @@ from GraphWriter.models.list_encoder import list_encode, lseq_encode
 from GraphWriter.models.last_graph import graph_encode
 from GraphWriter.models.beam import Beam
 from GraphWriter.models.splan import splanner
+from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
+
 
 class model(nn.Module):
-  def __init__(self,args, config):
-    super().__init__()
+  def __init__(self,args, config, data):
     super().__init__()
     self.args = args
     self.args.ntoks = config.ntoks
@@ -16,12 +17,16 @@ class model(nn.Module):
 
     self.emb = nn.Embedding(config.ntoks,args.hsz)
     self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
-
+    # TODO
+    self.span_encoder = SpanEmbeddingsWrapper(config, data, generate_candidates=False)
+    self.train_disjoint = True
     self.out = nn.Linear(
       args.hsz*cattimes,
       #args.tgttoks # TODO target tokens
       config.ntoks
     )
+
+    self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
     #self.le = list_encode(args)
     self.entout = nn.Linear(args.hsz,1)
@@ -43,6 +48,9 @@ class model(nn.Module):
       self.attn2 = MultiHeadAttention(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
       self.mix = nn.Linear(args.hsz,1)
 
+  def set_train_disjoint(self, value):
+    self.train_disjoint = value
+
   def forward(self,b):
     if self.args.title:
       # batch of sentences. passed as tensor of plain wordss
@@ -51,13 +59,29 @@ class model(nn.Module):
 
       # b.src[1] sentences length, mask is used to discard padding
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
+
+    if self.train_disjoint:
+      ent_embs = self.span_encoder(b)[4]
+      entlens = []
+      offset = 0
+      for count, nlen in enumerate(b.doc_len):
+        entlens.append(sum(b.ner_len[offset:offset + nlen]))
+        offset += nlen
+
+      ents = self.span_encoder.pad_entities(ent_embs, entlens)
+      entlens = torch.tensor(entlens)
+      rel_lengths = [len(item) for item in b.rels]
+      rel_indices = [item for sublist in b.rels for item in sublist]
+      b.rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
+    else:
+      ents = b.top_spans
+      entlens = b.doc_num_entities
+
     outp,_ = b.out
-    ents = b.top_spans
-    entlens = b.doc_num_entities
 
     if self.graph:
       # rel[0] is adj, rel[1] is rel array
-      gents,glob,grels = self.ge(b.adj,b.rels,(b.top_spans,b.doc_num_entities))
+      gents,glob,grels = self.ge(b.adj,b.rels,(ents,entlens))
       hx = glob
       keys,mask = grels
       # Flip the mask
@@ -121,17 +145,16 @@ class model(nn.Module):
       outputs.append(out)
     l = torch.stack(outputs,1)
 
-    ## -- Experiment 1: Commenting out all copy and switch related vars and only consider generating voca
-    #s = torch.sigmoid(self.switch(l))
+    s = torch.sigmoid(self.switch(l))
     o = self.out(l)
     o = torch.softmax(o,2)
-    #o = s*o
+    o = s*o
 
     #compute copy attn
-    #_, z = self.mattn(l,(ents,entlens))
-    #z = torch.softmax(z,2)
-    #z = (1-s)*z
-    #o = torch.cat((o,z),2)
+    _, z = self.mattn(l,(ents,entlens))
+    z = torch.softmax(z,2)
+    z = (1-s)*z
+    o = torch.cat((o,z),2)
     o = o+(1e-6*torch.ones_like(o))
     return o.log(),planlogits
 
@@ -161,7 +184,7 @@ class model(nn.Module):
     entlens = b.doc_num_entities
 
     if self.graph:
-      gents,glob,grels = self.ge(b.adj,b.rels,(b.top_spans,b.doc_num_entities))
+      gents,glob,grels = self.ge(b.adj,b.rels,(ents,b.entlens))
 
       hx = glob
       #hx = ents.max(dim=1)[0]
@@ -280,4 +303,5 @@ class model(nn.Module):
       a = beam.getlast()
 
     return beam
+
 
