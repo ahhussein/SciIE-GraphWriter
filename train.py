@@ -124,27 +124,28 @@ def main(args):
             data_iter,
             args.device,
             config,
-            train_sci or train_joint,
+            offset,
             train_graph or train_joint,
-            offset
+            train_sci or train_joint,
+            train_joint
         )
 
-        val_loss, val_sci_loss, val_gr_loss = evaluate(
-            model,
-            graph_model,
-            dataset_wrapper,
-            val_iter,
-            args.device,
-            config,
-            train_sci or train_joint,
-            train_graph or train_joint
-        )
+        # val_loss, val_sci_loss, val_gr_loss = evaluate(
+        #     model,
+        #     graph_model,
+        #     dataset_wrapper,
+        #     val_iter,
+        #     args.device,
+        #     config,
+        #     train_sci or train_joint,
+        #     train_graph or train_joint
+        # )
 
         if args.lrwarm and graph_opt:
             update_lr(graph_opt, args, epoch)
 
         print(f"epoch: {epoch + 1} - loss: {loss}")
-        print(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
+        #print(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
 
         print("Saving models")
 
@@ -162,9 +163,9 @@ def main(args):
             )
 
         writer.add_scalar('train/loss', loss, epoch)
-        writer.add_scalar('val/loss', val_loss, epoch)
-        writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
-        writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
+        #writer.add_scalar('val/loss', val_loss, epoch)
+        #writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
+        #writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
 
         scheduler.step()
 
@@ -175,6 +176,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     ex = 0
 
     for count, batch in enumerate(data_iter):
+        if count > 1:
+            continue
+        print(f"Batch text length: {batch.text_len}")
         batch = dataset.fix_batch(batch)
 
         if train_joint:
