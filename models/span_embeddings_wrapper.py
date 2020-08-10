@@ -14,7 +14,7 @@ class SpanEmbeddingsWrapper(nn.Module):
         self.span_embeddings = SpanEmbeddings(config, data, not generate_candidates)
         self.generate_candidates = generate_candidates
         self.config = config
-        self.emb_projection = nn.Linear(1270, 500)
+        #self.emb_projection = nn.Linear(1270, 500)
 
     def forward(self, batch):
         # max sentence length in terms of number of words
@@ -81,7 +81,7 @@ class SpanEmbeddingsWrapper(nn.Module):
         )
 
         # Project entity embs to lower space
-        candidate_span_emb = self.emb_projection(candidate_span_emb)
+        #candidate_span_emb = self.emb_projection(candidate_span_emb)
 
         return (
             candidate_starts,
