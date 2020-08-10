@@ -242,7 +242,7 @@ class Model(nn.Module):
                                                                       mention_idx, antecedent_scores, antecedent_mask)
 
             # Rel embeddings
-            rel_indices = torch.arange(start=1, end=len(self.data.rel_labels)).repeat(
+            rel_indices = torch.arange(len(self.data.rel_labels)).repeat(
                 sum(num_entities * num_entities)
             )
 
