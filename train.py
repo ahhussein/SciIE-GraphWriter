@@ -120,7 +120,7 @@ def main(args):
         else:
             train_joint = False
 
-        predict_dict, loss, offset = train(
+        predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
             dataset_wrapper,
@@ -168,6 +168,9 @@ def main(args):
             )
 
         writer.add_scalar('train/loss', loss, epoch)
+        writer.add_scalar('train/gr_loss', gr_loss, epoch)
+        writer.add_scalar('train/sci_loss', sci_loss, epoch)
+        writer.add_scalar('train/loss', loss, epoch)
         writer.add_scalar('val/loss', val_loss, epoch)
         writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
         writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
@@ -179,7 +182,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     print("Training", end="\t")
     l = 0
     ex = 0
-
+    g_loss = 0
+    sc_loss = 0
+    total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
         print(f"Batch text length: {batch.text_len}")
         batch = dataset.fix_batch(batch)
@@ -204,14 +209,18 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         else:
             gr_loss = torch.tensor(0)
 
-        if train_graph:
+        if train_joint:
             total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
-        else:
-            total_loss = sci_loss
+            total_loss.backward()
+            l += total_loss.item() * len(batch.doc_len)
+        if train_graph and not train_joint:
+            gr_loss.backward()
+            g_loss += gr_loss.item() * len(batch.doc_len)
+        if train_sci and not train_joint:
+            sci_loss.backward()
+            sc_loss += sci_loss.item() * len(batch.doc_len)
 
         optimizer.zero_grad()
-
-        total_loss.backward()
 
         step_list = []
         if train_graph:
@@ -222,7 +231,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         optimizer.step(step_list)
 
-        l += total_loss.item() * len(batch.doc_len)
 
         # Number of documents
         ex += len(batch.doc_len)
@@ -245,7 +253,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         if train_graph:
             nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
 
-    return predict_dict, l / (ex), step
+    return predict_dict, l / (ex), sc_loss / (ex), g_loss / (ex), step
 
 
 def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph=True, train_sci=True, train_joint=False):
