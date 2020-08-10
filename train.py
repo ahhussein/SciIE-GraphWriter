@@ -142,8 +142,8 @@ def main(args):
             val_iter,
             args.device,
             config,
-            train_sci or train_joint,
             train_graph or train_joint,
+            train_sci or train_joint,
             train_joint
         )
 
@@ -199,7 +199,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
             p = p[:, :-1, :].contiguous()
 
-            tgt = batch.out[0][:, 1:].contiguous().view(-1).to(device)
+            tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
             gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
         else:
             gr_loss = torch.tensor(0)
@@ -277,9 +277,11 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
 
                 p = p[:, :-1, :].contiguous()
 
-                tgt = batch.out[0][:, 1:].contiguous().view(-1).to(device)
-
+                tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
                 gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
+                if ex == 0:
+                    g = p[0].max(1)[1]
+                    #print(ds.reverse(g, b.rawent[0]))
             else:
                 gr_loss = torch.tensor(0)
 
