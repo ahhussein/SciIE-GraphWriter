@@ -177,7 +177,6 @@ class DocumentDataset():
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
 
             # TODO title
             title = 'Dummy title'
@@ -188,8 +187,17 @@ class DocumentDataset():
                 (
                     np.stack(np.array(doc_sentences_processed), 1).tolist()
                 ) + [
-                    title, len(doc_sentences_processed), out_text
+                    title, len(doc_sentences_processed)
                 ], self.fields)
+
+            adj, rel, entities2idx = self.mkGraph(example)
+
+            out_text, tgt_text = self.build_out_text_for_document(doc_sentences, entities2idx)
+
+            example.out = out_text
+            example.tgt = tgt_text
+            example.adj = adj
+            example.rels = rel
 
             self.eval_examples.append(example)
 
