@@ -129,9 +129,10 @@ def main(args):
             data_iter,
             args.device,
             config,
-            train_sci or train_joint,
+            offset,
             train_graph or train_joint,
-            offset
+            train_sci or train_joint,
+            train_joint
         )
 
         # val_loss, val_sci_loss, val_gr_loss = evaluate(
@@ -149,7 +150,7 @@ def main(args):
             update_lr(graph_opt, args, epoch)
 
         print(f"epoch: {epoch + 1} - loss: {loss}")
-        # print(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
+        #print(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
 
         print("Saving models")
 
@@ -180,8 +181,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     ex = 0
 
     for count, batch in enumerate(data_iter):
-        print("Training sci batch")
-        print(torch.cuda.memory_stats(device=device))
         print(f"Batch text length: {batch.text_len}")
         batch = dataset.fix_batch(batch)
 
