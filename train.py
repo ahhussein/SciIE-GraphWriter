@@ -209,6 +209,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         else:
             gr_loss = torch.tensor(0)
 
+        optimizer.zero_grad()
+
         if train_joint:
             total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
             total_loss.backward()
@@ -220,17 +222,15 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             sci_loss.backward()
             sc_loss += sci_loss.item() * len(batch.doc_len)
 
-        optimizer.zero_grad()
 
         step_list = []
         if train_graph:
-            step_list.append('sci')
-
-        if train_sci:
             step_list.append('graph')
 
-        optimizer.step(step_list)
+        if train_sci:
+            step_list.append('sci')
 
+        optimizer.step(step_list)
 
         # Number of documents
         ex += len(batch.doc_len)
