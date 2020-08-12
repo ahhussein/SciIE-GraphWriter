@@ -26,8 +26,7 @@ class model(nn.Module):
       config.ntoks
     )
 
-    #self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
-    self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 1270)
+    self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
     #self.le = list_encode(args)
     self.entout = nn.Linear(args.hsz,1)
