@@ -105,6 +105,8 @@ def main(args):
         else:
             train_sci = False
 
+        print(config['train_graph_for'])
+ 
         if config['train_graph_for'] and config['train_graph_for'] > epoch:
             train_graph = True
         else:
@@ -195,8 +197,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             predict_dict = None
 
         if train_graph:
+            print("start graph for batch")
             p, planlogits = graph_model(batch)
-
+            print("end graph for a batch")
             p = p[:, :-1, :].contiguous()
 
             tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
