@@ -15,6 +15,8 @@ class SpanEmbeddingsWrapper(nn.Module):
         self.generate_candidates = generate_candidates
         self.config = config
         self.emb_projection = nn.Linear(1270, 500)
+        torch.nn.init.xavier_uniform_(self.emb_projection.weight)
+
 
     def forward(self, batch):
         # max sentence length in terms of number of words
