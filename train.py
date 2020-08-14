@@ -99,6 +99,8 @@ def main(args):
 
     offset = 0
     for epoch in range(max(config['train_graph_for'], config['train_sci_for']) + config['train_both_for']):
+        torch.autograd.set_detect_anomaly(True)
+
         if config['train_sci_for'] and config['train_sci_for'] > epoch:
             train_sci = True
         else:
