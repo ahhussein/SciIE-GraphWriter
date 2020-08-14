@@ -26,10 +26,12 @@ class model(nn.Module):
       config.ntoks
     )
 
+    torch.nn.init.xavier_uniform_(self.out.weight)
+
     self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
     #self.le = list_encode(args)
-    self.entout = nn.Linear(args.hsz,1)
+    #self.entout = nn.Linear(args.hsz,1)
     self.switch = nn.Linear(args.hsz*cattimes,1)
     self.attn = MultiHeadAttention2(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
     self.mattn = MatrixAttn(args.hsz*cattimes,args.hsz)
@@ -242,17 +244,17 @@ class model(nn.Module):
         #a =  a + (self.mix(hx)*a2)
         a = torch.cat((a,a2),1)
       l = torch.cat((hx,a),1).unsqueeze(1)
-      #s = torch.sigmoid(self.switch(l))
+      s = torch.sigmoid(self.switch(l))
       o = self.out(l)
       o = torch.softmax(o,2)
 
       # TODO copy
-      #o = s*o
+      o = s*o
       #compute copy attn
-      #_, z = self.mattn(l,(ents,entlens))
-      #z = torch.softmax(z,2)
-      #z = (1-s)*z
-      #o = torch.cat((o,z),2)
+      _, z = self.mattn(l,(ents,entlens))
+      z = torch.softmax(z,2)
+      z = (1-s)*z
+      o = torch.cat((o,z),2)
       o[:,:,0].fill_(0)
       o[:,:,1].fill_(0)
       '''

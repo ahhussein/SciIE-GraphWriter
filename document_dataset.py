@@ -485,7 +485,7 @@ class DocumentDataset():
         specials = "method material otherscientificterm metric task".split(" ")
         # The size of the tgt vocab will still be the size without these specials
         for x in specials:
-            for y in range(5000):
+            for y in range(700):
                 s = "<" + x + "_" + str(y) + ">"
                 # Change indices of those vocab
                 self.tgt.vocab.stoi[s] = len(self.tgt.vocab.itos) + y
@@ -621,8 +621,8 @@ class DocumentDataset():
             for rel_idx in range(sent_num_rel):
                 # TODO fix indices
                 rel.extend([
-                    (example.rel_labels[sent_idx][rel_idx] + 1).item(),
-                    (example.rel_labels[sent_idx][rel_idx] + 1 + len(self.rel_labels_extended) - 1).item()
+                    (example.rel_labels[sent_idx][rel_idx]).item(),
+                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended) - 1).item()
                 ])
 
                 first_ent_start = example.rel_e1_starts[sent_idx][rel_idx]
@@ -654,13 +654,13 @@ class DocumentDataset():
                             self.rel_labels_extended['MERGE']
                         ])
 
-                        c = ent_len + len(rel) - 1
+
                     else:
                         rel.extend([
                             self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended) - 1
                         ])
 
-                        c = ent_len + len(rel) - 1
+                    c = ent_len + len(rel) - 1
 
                     adj[a, c] = 1
                     adj[c, b] = 1

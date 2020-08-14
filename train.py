@@ -8,7 +8,6 @@ import torch
 from torch.nn import functional as F
 from torch import nn
 from optimizers import MultipleOptimizer
-
 from torch.utils.tensorboard import SummaryWriter
 import subprocess
 
@@ -110,6 +109,8 @@ def main(args):
         else:
             train_sci = False
 
+        print(config['train_graph_for'])
+ 
         if config['train_graph_for'] and config['train_graph_for'] > epoch:
             train_graph = True
         else:
@@ -200,16 +201,16 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             predict_dict = None
 
         if train_graph:
+            print("start graph for batch")
             p, planlogits = graph_model(batch)
-
+            print("end graph for a batch")
             p = p[:, :-1, :].contiguous()
 
+            # TODO
             tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
             gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
         else:
             gr_loss = torch.tensor(0)
-
-        optimizer.zero_grad()
 
         if train_joint:
             total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
@@ -221,6 +222,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         if train_sci and not train_joint:
             sci_loss.backward()
             sc_loss += sci_loss.item() * len(batch.doc_len)
+
+        #plot_grad_flow(graph_model.named_parameters(), writer)
 
 
         step_list = []
@@ -242,6 +245,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         writer.add_scalar('t/gr_loss/batch', gr_loss.item(), step)
         writer.add_scalar('t/total/batch', total_loss.item(), step)
 
+
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
         # sci_loss.backward()
@@ -252,6 +256,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
         if train_graph:
             nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
+
+        optimizer.zero_grad()
+
 
     return predict_dict, l / (ex), sc_loss / (ex), g_loss / (ex), step
 
@@ -316,6 +323,27 @@ def get_gpu_memory_map():
         ])
 
     return float(result)
+
+# def plot_grad_flow(named_parameters, writer):
+#     '''Plots the gradients flowing through different layers in the net during training.
+#     Can be used for checking for possible gradient vanishing / exploding problems.
+#
+#     Usage: Plug this function in Trainer class after loss.backwards() as
+#     "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+#     ave_grads = []
+#     max_grads = []
+#     layers = []
+#     for n, p in named_parameters:
+#         if (p.requires_grad) and ("bias" not in n) and (p.grad != None):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean())
+#             max_grads.append(p.grad.abs().max())
+#             writer.add_scalars(n, {
+#                 'avg': p.grad.abs().mean(),
+#                 'max': p.grad.abs().max(),
+#             })
+#
+#     return ave_grads, max_grads, layers
 
 if __name__ == "__main__":
     args = pargs()
