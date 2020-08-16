@@ -112,7 +112,7 @@ if __name__=="__main__":
   graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
   graph_cpt = torch.load(f"{config['log_dir']}/{graph_model_name}", map_location='cuda:0')
   graph_model.load_state_dict(graph_cpt)
-  #m = m.to(args.device)
+  m = graph_model.to(args.device)
   graph_model.args = args
   graph_model.maxlen = args.max
 
