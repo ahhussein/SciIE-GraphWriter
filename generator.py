@@ -91,7 +91,7 @@ if __name__=="__main__":
   # sci_model_name = 'model__4.loss-86.47219597952706.lr-0.0004985014995'
   # sci_model_name = 'model__3.loss-102.81670368739537.lr-0.0004990005'
 
-  graph_model_name = 'graph_model__1.loss-0.0.lr-0.02'
+  graph_model_name = 'graph_model__41.loss-0.0.lr-0.05'
   #graph_model_name = 'graph_model__3.loss-102.81670368739537.lr-0.1'
 
   args = pargs()
@@ -110,7 +110,7 @@ if __name__=="__main__":
 
   # Load graph model
   graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
-  graph_cpt = torch.load(f"{config['log_dir']}/{graph_model_name}")
+  graph_cpt = torch.load(f"{config['log_dir']}/{graph_model_name}", map_location='cuda:0')
   graph_model.load_state_dict(graph_cpt)
   #m = m.to(args.device)
   graph_model.args = args
