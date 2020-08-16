@@ -97,7 +97,7 @@ if __name__=="__main__":
   args = pargs()
   args.eval = True
   config = util.get_config("experiments.conf")[exp_name]
-  dataset_wrapper = DocumentDataset(config, is_eval=True)
+  dataset_wrapper = DocumentDataset(config, args, is_eval=True)
   args = dynArgs(args)
 
 
