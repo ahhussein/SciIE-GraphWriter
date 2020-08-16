@@ -173,7 +173,7 @@ class model(nn.Module):
     if mask.sum()>0:
       idxs = (outp-self.args.ntoks)
       idxs = idxs[mask]
-      verts = vertex.index_select(1,idxs)
+      verts = vertex.index_select(0,idxs)
       outp.masked_scatter_(mask,verts)
 
     return outp
@@ -182,11 +182,22 @@ class model(nn.Module):
     if self.args.title:
       tencs,_ = self.tenc(b.src)
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
-    ents = b.top_spans
-    entlens = b.doc_num_entities
+
+    ent_embs = self.span_encoder(b)[4]
+    entlens = []
+    offset = 0
+    for count, nlen in enumerate(b.doc_len):
+      entlens.append(sum(b.ner_len[offset:offset + nlen]))
+      offset += nlen
+
+    ents = self.span_encoder.pad_entities(ent_embs, entlens)
+    entlens = torch.tensor(entlens)
+    rel_lengths = [len(item) for item in b.rels]
+    rel_indices = [item for sublist in b.rels for item in sublist]
+    b.rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
     if self.graph:
-      gents,glob,grels = self.ge(b.adj,b.rels,(ents,b.entlens))
+      gents,glob,grels = self.ge(b.adj,b.rels,(ents,entlens))
 
       hx = glob
       #hx = ents.max(dim=1)[0]
@@ -219,12 +230,12 @@ class model(nn.Module):
       a = torch.cat((a,a2),1)
     outputs = []
 
-    # TODO ensure that this represents the number of documents
+
     outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
     beam = None
     for i in range(self.maxlen):
-      # TODO nerd
-      op = self.emb_w_vertex(outp.clone(),None)
+
+      op = self.emb_w_vertex(outp.clone(),b.nerd)
       if self.args.plan:
         schange = op==self.args.dottok
         if schange.nonzero().size(0)>0:

@@ -25,7 +25,7 @@ class MatrixAttn(nn.Module):
     emask = (emask >= elen.unsqueeze(1)).unsqueeze(1)
     decsmall = self.attnlin(dec)
     unnorm = torch.bmm(decsmall,emb.transpose(1,2))
-    unnorm.masked_fill_(emask,-float('inf'))
+    unnorm.masked_fill_(emask,-1 * 1e-15)
     attn = F.softmax(unnorm,dim=2)
     out = torch.bmm(attn,emb)
     return out, attn

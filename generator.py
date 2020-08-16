@@ -22,11 +22,11 @@ def tgtreverse(tgts,entlist,order):
       k+=1
   return " ".join(tgts)
 
-def test(args,ds,sci_model, graph_model,epoch='cmdline'):
+def test(args,ds, graph_model,epoch='cmdline'):
   args.vbsz = 1
   model = args.save.split("/")[-1]
   ofn = "outputs/"+model+".beam_predictions"
-  sci_model.eval()
+  #sci_model.eval()
   graph_model.eval()
   k = 0
   test_iter = data.Iterator(
@@ -52,15 +52,14 @@ def test(args,ds,sci_model, graph_model,epoch='cmdline'):
       p = p[0].max(1)[1]
       gen = ds.reverse(p,b.rawent)
       '''
-      # TODO review the flow through the model
-      sci_model(b)
+      # sci_model(b)
       gen = graph_model.beam_generate(b,beamsz=4,k=6)
       gen.sort()
       # TODO pass ents
-      gen = ds.reverse(gen.done[0].words,None)
+      gen = ds.reverse(gen.done[0].words,b.rawent)
       k+=1
       # TODO pass ents
-      gold = ds.reverse(b.out[0][0][1:],None)
+      gold = ds.reverse(b.out[0][0][1:],b.rawent)
       print(gold)
       print(gen)
       print()
@@ -69,7 +68,7 @@ def test(args,ds,sci_model, graph_model,epoch='cmdline'):
       #tf.write(ent+'\n')
       pf.write(gen.lower()+'\n')
 
-  sci_model.train()
+  #sci_model.train()
   graph_model.train()
 
   return preds,golds
@@ -89,10 +88,10 @@ if __name__=="__main__":
   exp_name = "scientific_best_ner"
 
   # TODO read the models dynamically
-  sci_model_name = 'model__4.loss-86.47219597952706.lr-0.0004985014995'
-  #sci_model_name = 'model__3.loss-102.81670368739537.lr-0.0004990005'
+  # sci_model_name = 'model__4.loss-86.47219597952706.lr-0.0004985014995'
+  # sci_model_name = 'model__3.loss-102.81670368739537.lr-0.0004990005'
 
-  graph_model_name = 'graph_model__4.loss-86.47219597952706.lr-0.1'
+  graph_model_name = 'graph_model__1.loss-0.0.lr-0.02'
   #graph_model_name = 'graph_model__3.loss-102.81670368739537.lr-0.1'
 
   args = pargs()
@@ -105,12 +104,12 @@ if __name__=="__main__":
   config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], exp_name))
 
   # Load sci model
-  model = Model(config, dataset_wrapper)
-  sci_cpt = torch.load(f"{config['log_dir']}/{sci_model_name}")
-  model.load_state_dict(sci_cpt)
+  #model = Model(config, dataset_wrapper)
+  #sci_cpt = torch.load(f"{config['log_dir']}/{sci_model_name}")
+  #model.load_state_dict(sci_cpt)
 
   # Load graph model
-  graph_model = graph(args, dataset_wrapper.config)
+  graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
   graph_cpt = torch.load(f"{config['log_dir']}/{graph_model_name}")
   graph_model.load_state_dict(graph_cpt)
   #m = m.to(args.device)
@@ -124,7 +123,7 @@ if __name__=="__main__":
   graph_model.endtok = dataset_wrapper.out.vocab.stoi['<eos>']
   graph_model.eostok = dataset_wrapper.out.vocab.stoi['.']
   args.vbsz = 1
-  preds,gold = test(args,dataset_wrapper, model,graph_model)
+  preds,gold = test(args,dataset_wrapper ,graph_model)
   '''
   scores = metrics(preds,gold)
   for k,v in scores.items():
