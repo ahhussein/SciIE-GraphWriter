@@ -462,10 +462,13 @@ class DocumentDataset():
 
     def fix_batch(self, batch):
         for field in self.dataset.fields:
+            if field == 'nerd':
+                setattr(batch, field, getattr(batch, field).to(self.args.device))
+
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt', 'rawent']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt', 'rawent', 'nerd']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
@@ -528,7 +531,11 @@ class DocumentDataset():
         # TODO, ents
         ents = ents[0]
         vocab = self.out.vocab
-
+        print("ents")
+        print(ents)
+        print(x)
+        print("vocab size")
+        print(len(vocab.itos))
         s = ' '.join(
             [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
 

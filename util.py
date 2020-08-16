@@ -80,10 +80,12 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.bool):
     if maxlen is None:
         maxlen = lengths.max()
 
-    row_vector = torch.arange(0, maxlen)
+    row_vector = torch.arange(0, maxlen).to(lengths.get_device())
+    print(row_vector.get_device())
     matrix = torch.unsqueeze(lengths, dim=-1)
     mask = row_vector < matrix
-
+    print(mask.get_device())
+    print('mask')
     mask = mask.type(dtype)
     return mask
 

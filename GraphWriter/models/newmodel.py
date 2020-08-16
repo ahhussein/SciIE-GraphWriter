@@ -172,10 +172,18 @@ class model(nn.Module):
     mask = outp>=self.args.ntoks
     if mask.sum()>0:
       idxs = (outp-self.args.ntoks)
+      print("idxs")
+      print(idxs)
       idxs = idxs[mask]
+      print('filtered indexes')
+      print(idxs)
       verts = vertex.index_select(0,idxs)
+      print("vertx")
+      print(verts)
+      print(outp.shape)
+      print(mask)
+      print(outp)
       outp.masked_scatter_(mask,verts)
-
     return outp
 
   def beam_generate(self,b,beamsz,k):
@@ -231,7 +239,8 @@ class model(nn.Module):
     outputs = []
 
 
-    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
+    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok).cuda()
+    print(outp.get_device())
     beam = None
     for i in range(self.maxlen):
 

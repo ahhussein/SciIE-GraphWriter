@@ -43,6 +43,7 @@ def test(args,ds, graph_model,epoch='cmdline'):
   golds = []
 
   for b in test_iter:
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
     with torch.no_grad():
       #if k == 10: break
       print(k,len(test_iter))
