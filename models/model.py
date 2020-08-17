@@ -88,10 +88,12 @@ class Model(nn.Module):
             # entity_starts = entity_ends = entity_scores(same score as candidate_entity_scores but pruned) = [num_sentences, max_num_ents]
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
+            print("Getting entities topk")
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False
             )
+            print("Done getting entities topk")
 
             # [num_sentences, max_num_ents]
             # absolute indices (offset added)
@@ -133,6 +135,7 @@ class Model(nn.Module):
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
             # TODO does the doc_len affect the calculations
+            print("Mentions topk")
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -142,6 +145,7 @@ class Model(nn.Module):
                 True,
                 True
             )  # [1, topk]
+            print("done mentions topk")
 
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
             mention_starts = flat_candidate_starts[top_mention_indices]  # [k]
