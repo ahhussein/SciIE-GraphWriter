@@ -6,10 +6,12 @@ from models.model import Model
 import torch
 from evaluator import Evaluator
 from eval_iter import EvalIterator
+from GraphWriter.pargs import pargs, dynArgs
 
 
 
-def main():
+
+def main(args):
     # ds = dataset(args)
     if len(sys.argv) > 1:
         name = sys.argv[1]
@@ -27,8 +29,9 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
+    args = dynArgs(args)
 
-    dataset = DocumentDataset(config=config, is_eval=True)
+    dataset = DocumentDataset(config=config, args, is_eval=True)
 
 
     # TODO read gpu dynamically
@@ -67,6 +70,5 @@ def main():
 
 
 if __name__ == "__main__":
-    util.set_gpus()
-
-    main()
+    args = pargs()
+    main(args)
