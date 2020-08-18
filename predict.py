@@ -1,7 +1,7 @@
 import sys
 import os
 import util
-from document_dataset import EvalDataset
+from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
@@ -32,7 +32,7 @@ def main():
         config["lm_path"] = config["lm_path_dev"]
 
     # TODO test data set
-    dataset = EvalDataset(config=config)
+    dataset = DocumentDataset(config=config, is_eval=True)
 
     # TODO is training model eval
     model = Model(config, dataset)
