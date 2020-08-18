@@ -31,7 +31,7 @@ def main(args):
 
     args = dynArgs(args)
 
-    dataset = DocumentDataset(config=config, args, is_eval=True)
+    dataset = DocumentDataset(config, args, True)
 
 
     # TODO read gpu dynamically
