@@ -47,7 +47,6 @@ def main(args):
     dataset_wrapper = DocumentDataset(config, args)
 
     # Graph writer arguments
-    args = dynArgs(args)
 
     if config['train_graph_for'] or config['train_both_for']:
         graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
