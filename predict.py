@@ -27,14 +27,8 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
-    # Use dev lm, if provided.
-    if config["lm_path"] and "lm_path_dev" in config and config["lm_path_dev"]:
-        config["lm_path"] = config["lm_path_dev"]
-
-    # TODO test data set
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    # TODO is training model eval
     model = Model(config, dataset)
 
     evaluator = Evaluator(config, dataset, model)
@@ -42,7 +36,7 @@ def main():
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__1"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
 
     # Load batch of sentences for each document
     data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)

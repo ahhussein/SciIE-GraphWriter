@@ -218,6 +218,9 @@ class DocumentDataset():
         num_sentences = 0
         doc_count = 0
         cluster_id_offset = 0
+        eval_data = {}
+        coref_eval_data = {}
+
 
         with open(self.config["test_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
@@ -237,7 +240,8 @@ class DocumentDataset():
             num_sentences += len(doc_examples[-1])
             doc_count += 1
 
-            #coref_eval_data[doc_id] = document
+            eval_data[doc_id] = data_utils.split_example_for_eval(document)
+            coref_eval_data[doc_id] = document
 
         print("Loaded {} eval examples.".format(doc_count))
 
@@ -269,6 +273,8 @@ class DocumentDataset():
             example.rawout = raw_out
 
             self.eval_examples.append(example)
+        self.eval_data = eval_data
+        self.coref_eval_data = coref_eval_data
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
