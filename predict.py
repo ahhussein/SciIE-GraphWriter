@@ -27,9 +27,15 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
+
     dataset = DocumentDataset(config=config, is_eval=True)
 
+
+    # TODO read gpu dynamically
+    device = torch.device(0)
     model = Model(config, dataset)
+
+    model.to(device)
 
     evaluator = Evaluator(config, dataset, model)
 
@@ -37,6 +43,8 @@ def main():
     log_dir = config["log_dir"]
 
     model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
+
+
 
     # Load batch of sentences for each document
     data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
