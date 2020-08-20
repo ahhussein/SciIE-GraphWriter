@@ -60,12 +60,13 @@ def main(args):
     )
 
     for count, batch in enumerate(data_iter):
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+        with torch.no_grad():
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-        doc_batch = dataset.fix_batch(batch)
-        evaluator.evaluate(doc_batch)
-        if (count + 1) % 50 == 0:
-            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+            doc_batch = dataset.fix_batch(batch)
+            evaluator.evaluate(doc_batch)
+            if (count + 1) % 50 == 0:
+                print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
     evaluator.write_out()
     # Move to evaualtor
     # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()
