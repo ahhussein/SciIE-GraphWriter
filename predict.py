@@ -61,6 +61,8 @@ def main(args):
     )
 
     for count, batch in enumerate(data_iter):
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
         doc_batch = dataset.fix_batch(batch)
         evaluator.evaluate(doc_batch)
         if (count + 1) % 50 == 0:
