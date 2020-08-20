@@ -271,10 +271,6 @@ class Model(nn.Module):
                 coref_lengths
             )
 
-            print(f"spans size: {batch.top_spans}")
-
-            # TODO figure how to append mentions
-            # TODO train without mention
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
                 # -inf to the padded spans
