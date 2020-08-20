@@ -8,6 +8,7 @@ from evaluator import Evaluator
 from eval_iter import EvalIterator
 from torchtext import data
 
+torch.manual_seed(0)
 
 
 def main():
