@@ -7,6 +7,7 @@ import torch
 from evaluator import Evaluator
 from eval_iter import EvalIterator
 from GraphWriter.pargs import pargs, dynArgs
+from torchtext import data
 
 
 
@@ -50,7 +51,14 @@ def main(args):
 
 
     # Load batch of sentences for each document
-    data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
+    data_iter = data.Iterator(
+        dataset.test_dataset,
+        1,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
 
     for count, batch in enumerate(data_iter):
         doc_batch = dataset.fix_batch(batch)
