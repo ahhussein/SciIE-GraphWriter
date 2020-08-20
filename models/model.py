@@ -8,7 +8,7 @@ import data_utils
 import util
 import span_prune_cpp
 from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
-
+import numpy as np
 
 class Model(nn.Module):
     def __init__(self, config, data):
@@ -23,9 +23,8 @@ class Model(nn.Module):
         self.rel_scores = RelScores(config, len(self.data.rel_labels))
         self.ner_scores = NerScores(config, len(self.data.ner_labels))
         self.train_disjoint=True
-        # TODO get the length dynamically
         # TODO investigate the no-relation link
-        self.rel_embs = nn.Embedding(len(self.data.rel_labels_extended), 500)
+        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
         # TODO try without project
         self.emb_projection = nn.Linear(1270, 500)
@@ -148,6 +147,7 @@ class Model(nn.Module):
             print("done mentions topk")
 
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
+
             mention_starts = flat_candidate_starts[top_mention_indices]  # [k]
             mention_ends = flat_candidate_ends[top_mention_indices]  # [k]
             mention_scores = candidate_mention_scores[top_mention_indices]  # [k]
@@ -245,10 +245,23 @@ class Model(nn.Module):
                                                                       masked_flattened_scores, num_doc_entities,
                                                                       mention_idx, antecedent_scores, antecedent_mask)
 
-            # Rel embeddings
-            rel_indices = torch.arange(len(self.data.rel_labels)).repeat(
-                sum(num_entities * num_entities)
-            )
+            rel_indices = []
+            for idx, sent_entities in enumerate(num_entities):
+                for entity1_idx in range(sent_entities):
+                    for entity2_idx in range(sent_entities):
+                        if entity1_idx < entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
+
+                        if entity1_idx == entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
+
+                        rel_indices.extend(range(
+                            len(self.data.rel_labels_extended),
+                            len(self.data.rel_labels_extended) + len(self.data.rel_labels),
+                        ))
+            rel_indices = torch.tensor(rel_indices)
 
             batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
                 top_spans,
@@ -258,8 +271,6 @@ class Model(nn.Module):
                 coref_lengths
             )
 
-            # TODO figure how to append mentions
-            # TODO train without mention
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
                 # -inf to the padded spans
@@ -332,9 +343,15 @@ class Model(nn.Module):
         )
                 )
 
-        # Build tgt
-        # batch.tgt = self.build_tgt(batch, batch_word_offset, top_span_indices, flat_candidate_starts,
-        #                            flat_candidate_ends)
+        # If joint training, overwrite `tgt` and `out` fields
+        if not self.train_disjoint:
+            self.build_tgt(
+                batch,
+                batch_word_offset,
+                top_span_indices,
+                flat_candidate_starts,
+                flat_candidate_ends
+            )
 
         return predict_dict, loss
 
@@ -369,7 +386,7 @@ class Model(nn.Module):
             entities_scores_y_ind = torch.arange(entities_scores_x_ind.shape[0])
 
             dim_y_without_mentions = (sum(doc_entities * doc_entities) * 8)
-            entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx], dim_y_without_mentions + doc_coref_count)
+            entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx], dim_y_without_mentions + doc_coref_count * 2)
 
             entities_rel_scores_arranged[
                 (entities_scores_x_ind, entities_scores_y_ind)
@@ -378,7 +395,21 @@ class Model(nn.Module):
             # coref scores
             entities_rel_scores_arranged[
                 (entity_rel_indx,
-                 torch.arange(start=dim_y_without_mentions, end=dim_y_without_mentions + doc_coref_count))
+                 torch.arange(
+                     start=dim_y_without_mentions,
+                     end=dim_y_without_mentions + doc_coref_count
+                 ))
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+
+            # coref scores inverse
+            entities_rel_scores_arranged[
+                (rel_entity_indy,
+                 torch.arange(
+                     start=dim_y_without_mentions + doc_coref_count,
+                     end=dim_y_without_mentions + doc_coref_count * 2
+                 )
+                 )
             ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
                 antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
 
@@ -425,6 +456,16 @@ class Model(nn.Module):
             ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
                 antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
 
+            # coref scores inverse
+            rel_scores_rearranged[
+                (torch.arange(
+                    start=dim_y_without_mentions+doc_coref_count,
+                    end=dim_y_without_mentions+ doc_coref_count * 2
+                ),
+                 entity_rel_indx)
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+
             rel_lengths.append(dim_y_without_mentions)
 
             graph_adj_lower = torch.cat(
@@ -436,7 +477,9 @@ class Model(nn.Module):
                     torch.diag(torch.ones(rel_scores_rearranged.shape[0]))
                 ), 1)
 
-            adj.append(torch.cat((graph_adj_upper, graph_adj_lower), 0))
+            temp_adj = torch.cat((graph_adj_upper, graph_adj_lower), 0).fill_diagonal_(1)
+
+            adj.append(temp_adj)
 
             # reset values for the next document
             doc_rel_ind_x = []
@@ -452,12 +495,18 @@ class Model(nn.Module):
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
-        # coref rels
-        coref_rels = self.rel_embs.weight[
-            torch.tensor(
-                self.data.rel_labels_extended['MERGE']
-            ).repeat(sum(coref_lengths))
-        ].split(coref_lengths)
+        coref_indices = torch.cat(
+            (
+                torch.tensor(
+                    self.data.rel_labels_extended['MERGE']
+                ).repeat(sum(coref_lengths)),
+                torch.tensor(
+                    self.data.rel_labels_extended['MERGE'] + len(self.data.rel_labels_extended) - 1
+                ).repeat(sum(coref_lengths))
+            ), 0
+        )
+
+        coref_rels = self.rel_embs.weight[coref_indices].split([x * 2 for x in coref_lengths])
 
         rels_list = []
 
@@ -508,7 +557,7 @@ class Model(nn.Module):
 
         return entity_rel_indx, rel_entity_indy, doc_offset, doc_coref_count
 
-    # TODO
+
     def build_tgt(self, batch, batch_word_offset, top_span_indices, flat_candidate_starts, flat_candidate_ends):
         # combine all document spans into one tensor
         top_span_indices_combined = torch.cat(top_span_indices, 0)
@@ -541,9 +590,11 @@ class Model(nn.Module):
                     )
 
         # If index exists, replace tgt that match these boundries with the label
+        tgt_texts = []
         out_texts = []
         for sent_idx, sentence in enumerate(batch.tokens):
             out_text = []
+            tgt_text = []
             current_ent = None
             sentence = sentence[:batch.text_len[sent_idx]]
             ner_pointer = 0
@@ -551,7 +602,8 @@ class Model(nn.Module):
                 current_ent = (
                     tgts_entities[sent_idx][ner_pointer][0],
                     tgts_entities[sent_idx][ner_pointer][1],
-                    f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}_{tgts_entities[sent_idx][ner_pointer][3]}>"
+                    f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}_{tgts_entities[sent_idx][ner_pointer][3]}>",
+                    f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}>"
                 )
 
             for idx, word in enumerate(sentence):
@@ -563,25 +615,41 @@ class Model(nn.Module):
                         current_ent = (
                             tgts_entities[sent_idx][ner_pointer][0],
                             tgts_entities[sent_idx][ner_pointer][1],
-                            f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}_{tgts_entities[sent_idx][ner_pointer][3]}>"
+                            f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}_{tgts_entities[sent_idx][ner_pointer][3]}>",
+                            f"<{self.data.ner_labels_inv[tgts_entities[sent_idx][ner_pointer][2]].replace(' ', '').lower()}>"
+
                         )
                     else:
                         current_ent = None
 
                 if not current_ent or idx < current_ent[0]:
                     out_text.append(word)
+                    tgt_text.append(word)
                     continue
 
                 if idx >= current_ent[0] and idx <= current_ent[1]:
                     # If this marks the end word of the span, append the type here
                     if idx == current_ent[1]:
-                        out_text.append(current_ent[2])
+                        out_text.append(current_ent[3])
+                        tgt_text.append(current_ent[2])
                         continue
+
+            tgt_texts.append(tgt_text)
             out_texts.append(out_text)
 
-        print(out_texts)
+        doc_text_len = []
+        offset = 0
+        for i, doc_len in enumerate(batch.doc_len):
+            doc_text_len.append(sum([len(text) for text in tgt_texts[offset:offset + doc_len]]))
+            offset += doc_len
 
-            # TODO merge document and build vocab
+
+        out = np.concatenate(np.array(out_texts))
+        batch.out = self.data.out.process(np.split(out, doc_text_len[:-1]))
+        tgt = np.concatenate(np.array(tgt_texts))
+        batch.tgt = self.data.tgt.process(np.split(tgt, doc_text_len[:-1]))
+
+
 
 
 

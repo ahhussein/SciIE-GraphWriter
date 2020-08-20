@@ -1,12 +1,14 @@
 import sys
 import os
 import util
-from document_dataset import EvalDataset
+from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
 from eval_iter import EvalIterator
+from torchtext import data
 
+torch.manual_seed(0)
 
 
 def main():
@@ -27,14 +29,8 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
-    # Use dev lm, if provided.
-    if config["lm_path"] and "lm_path_dev" in config and config["lm_path_dev"]:
-        config["lm_path"] = config["lm_path_dev"]
+    dataset = DocumentDataset(config=config, is_eval=True)
 
-    # TODO test data set
-    dataset = EvalDataset(config=config)
-
-    # TODO is training model eval
     model = Model(config, dataset)
 
     evaluator = Evaluator(config, dataset, model)
@@ -42,16 +38,25 @@ def main():
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__1"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
 
     # Load batch of sentences for each document
-    data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
+    data_iter = data.Iterator(
+        dataset.test_dataset,
+        1,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
 
     for count, batch in enumerate(data_iter):
-        doc_batch = dataset.fix_batch(batch)
-        evaluator.evaluate(doc_batch)
-        if (count + 1) % 50 == 0:
-            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+        with torch.no_grad():
+
+            doc_batch = dataset.fix_batch(batch)
+            evaluator.evaluate(doc_batch)
+            if (count + 1) % 50 == 0:
+                print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
     evaluator.write_out()
     # Move to evaualtor
     # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()

@@ -46,6 +46,7 @@ class DocumentDataset():
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
+        self.rawout = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>")
         self.tgt = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>")
         self.nerd = data.Field(sequential=True, eos_token="<eos>")
         # Fields declaration
@@ -79,7 +80,8 @@ class DocumentDataset():
             ("adj", data.RawField()),
             ("rels", data.RawField()),
             ("nerd", self.nerd),
-            ("rawent", data.RawField())
+            ("rawent", data.RawField()),
+            ("rawout", self.rawout),
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
@@ -194,7 +196,7 @@ class DocumentDataset():
 
             adj, rel, entities2idx = self.mkGraph(example)
 
-            out_text, tgt_text, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
+            out_text, tgt_text, raw_out, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
 
             example.out = out_text
             example.tgt = tgt_text
@@ -202,6 +204,7 @@ class DocumentDataset():
             example.adj = adj
             example.rels = rel
             example.rawent = ents
+            example.rawout = raw_out
 
             self.eval_examples.append(example)
 
@@ -215,6 +218,9 @@ class DocumentDataset():
         num_sentences = 0
         doc_count = 0
         cluster_id_offset = 0
+        eval_data = {}
+        coref_eval_data = {}
+
 
         with open(self.config["test_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
@@ -234,7 +240,8 @@ class DocumentDataset():
             num_sentences += len(doc_examples[-1])
             doc_count += 1
 
-            #coref_eval_data[doc_id] = document
+            eval_data[doc_id] = data_utils.split_example_for_eval(document)
+            coref_eval_data[doc_id] = document
 
         print("Loaded {} eval examples.".format(doc_count))
 
@@ -255,7 +262,7 @@ class DocumentDataset():
 
             adj, rel, entities2idx = self.mkGraph(example)
 
-            out_text, tgt_text, nerd, raw_ent = self.build_out_text_for_document(doc_sentences, entities2idx)
+            out_text, tgt_text, raw_out, nerd, raw_ent = self.build_out_text_for_document(doc_sentences, entities2idx)
 
             example.out = out_text
             example.tgt = tgt_text
@@ -263,8 +270,11 @@ class DocumentDataset():
             example.adj = adj
             example.rels = rel
             example.rawent = raw_ent
+            example.rawout = raw_out
 
             self.eval_examples.append(example)
+        self.eval_data = eval_data
+        self.coref_eval_data = coref_eval_data
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
@@ -307,7 +317,7 @@ class DocumentDataset():
 
             adj, rel, entities2idx = self.mkGraph(example)
 
-            out_text, tgt_text, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
+            out_text, tgt_text, raw_out, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
 
             example.out = out_text
             example.tgt = tgt_text
@@ -315,6 +325,7 @@ class DocumentDataset():
             example.adj = adj
             example.rels = rel
             example.rawent = ents
+            example.rawout = raw_out
 
             self.examples.append(example)
 
@@ -464,7 +475,7 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt', 'rawent']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt', 'rawent', 'nerd', 'rawout']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
@@ -485,7 +496,9 @@ class DocumentDataset():
         self.title.build_vocab(self.dataset, min_freq=5)
 
         generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
-        self.out.build_vocab(self.dataset, min_freq=5)
+        self.rawout.build_vocab(self.dataset, min_freq=5)
+        self.out.vocab = copy(self.rawout.vocab)
+
         self.out.vocab.itos.extend(generics)
         for x in generics:
             self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
@@ -538,6 +551,7 @@ class DocumentDataset():
     def build_out_text_for_document(self, doc_sentences, entities2idx):
         out_text = []
         tgt_text = []
+        raw_out = []
         global_idx = -1
         nerd = []
         ents = []
@@ -580,11 +594,13 @@ class DocumentDataset():
 
                 if not current_ent or global_idx < current_ent[0]:
                     out_text.append(word)
+                    raw_out.append(word)
                     tgt_text.append(word)
                     continue
 
                 if global_idx >= current_ent[0] and global_idx <= current_ent[1]:
                     ent_text.append(word)
+                    raw_out.append(word)
                     # If this marks the end word of the span, append the type here
                     if global_idx == current_ent[1]:
                         out_text.append(current_ent[2])
@@ -594,7 +610,7 @@ class DocumentDataset():
                         ent_text = []
                         continue
 
-        return out_text, tgt_text, nerd, ents
+        return out_text, tgt_text, raw_out, nerd, ents
 
     def mkGraph(self, example):
         # Preprocess corefs
@@ -642,10 +658,9 @@ class DocumentDataset():
         # converting relations into nodes
         for sent_idx, sent_num_rel in enumerate(example.rel_len):
             for rel_idx in range(sent_num_rel):
-                # TODO fix indices
                 rel.extend([
                     (example.rel_labels[sent_idx][rel_idx]).item(),
-                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended) - 1).item()
+                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended)).item()
                 ])
 
                 first_ent_start = example.rel_e1_starts[sent_idx][rel_idx]
@@ -680,7 +695,7 @@ class DocumentDataset():
 
                     else:
                         rel.extend([
-                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended) - 1
+                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended)
                         ])
 
                     c = ent_len + len(rel) - 1
