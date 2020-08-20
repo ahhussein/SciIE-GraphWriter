@@ -56,12 +56,9 @@ class ElmoEmbeddings(nn.Module):
         num_sentences = lm_emb.shape[0]
         max_sentence_length = lm_emb.shape[1]
         emb_size = lm_emb.shape[2]
-        print(lm_emb.get_device())
         # [num_sentences * max_sentence_length * emb, layers]
         flattened_lm_emb = lm_emb.view(num_sentences * max_sentence_length * emb_size, self.data.lm_layers)
-        print(flattened_lm_emb.get_device())
-        print(self.weights.get_device())
-  
+
         # [num_sentences * max_sentence_length * emb, 1]
         flattened_aggregated_lm_emb = torch.matmul(flattened_lm_emb, self.softmax(self.weights).unsqueeze(1))
         # [num_sentences, max_sentence_length, emb]

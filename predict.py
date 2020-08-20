@@ -9,6 +9,7 @@ from eval_iter import EvalIterator
 from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
 
+torch.manual_seed(0)
 
 
 
@@ -65,8 +66,8 @@ def main(args):
 
             doc_batch = dataset.fix_batch(batch)
             evaluator.evaluate(doc_batch)
-            if (count + 1) % 50 == 0:
-                print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+
+            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
     evaluator.write_out()
     # Move to evaualtor
     # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()
