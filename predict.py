@@ -6,6 +6,7 @@ from models.model import Model
 import torch
 from evaluator import Evaluator
 from eval_iter import EvalIterator
+from torchtext import data
 
 
 
@@ -39,7 +40,14 @@ def main():
     model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
 
     # Load batch of sentences for each document
-    data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
+    data_iter = data.Iterator(
+        dataset.test_dataset,
+        1,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
 
     for count, batch in enumerate(data_iter):
         doc_batch = dataset.fix_batch(batch)
