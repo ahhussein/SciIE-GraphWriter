@@ -34,12 +34,11 @@ def main(args):
 
     dataset = DocumentDataset(config, args, True)
 
+    config.device = args.device
 
-    # TODO read gpu dynamically
-    device = torch.device(0)
     model = Model(config, dataset)
 
-    model.to(device)
+    model.to(args.device)
 
     evaluator = Evaluator(config, dataset, model)
 
