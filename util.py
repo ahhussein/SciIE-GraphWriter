@@ -84,8 +84,6 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.bool):
     print(row_vector.get_device())
     matrix = torch.unsqueeze(lengths, dim=-1)
     mask = row_vector < matrix
-    print(mask.get_device())
-    print('mask')
     mask = mask.type(dtype)
     return mask
 
@@ -107,7 +105,6 @@ def flatten_emb(emb):
     elif emb_rank == 3:
         flattened_emb = emb.reshape(num_sentences * max_sentence_length, -1)
     else:
-        raise ValueError("Unsupported rank: {}".format(emb_rank))
         raise ValueError("Unsupported rank: {}".format(emb_rank))
 
     return flattened_emb
