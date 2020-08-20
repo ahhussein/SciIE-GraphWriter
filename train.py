@@ -106,8 +106,10 @@ def main(args):
         else:
             train_sci = False
 
-        print(config['train_graph_for'])
- 
+        print(f"Training Graph for: {config['train_graph_for']} epochs")
+        print(f"Training SCIERC for: {config['train_sci_for']} epochs")
+        print(f"Training Jointly for: {config['train_both_for']} epochs")
+
         if config['train_graph_for'] and config['train_graph_for'] > epoch:
             train_graph = True
         else:
@@ -184,7 +186,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     sc_loss = 0
     total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
-        print(f"Batch text length: {batch.text_len}")
         batch = dataset.fix_batch(batch)
 
         if train_joint:
@@ -192,15 +193,17 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             graph_model.set_train_disjoint(False)
 
         if train_sci:
+            print("Started training a sci batch")
             predict_dict, sci_loss = model(batch)
+            print("Ended training a sci batch")
         else:
             sci_loss = torch.tensor(0)
             predict_dict = None
 
         if train_graph:
-            print("start graph for batch")
+            print("Started training a graph batch")
             p, planlogits = graph_model(batch)
-            print("end graph for a batch")
+            print("Ended training a graph batch")
             p = p[:, :-1, :].contiguous()
 
             # TODO
