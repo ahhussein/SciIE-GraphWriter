@@ -196,17 +196,15 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             graph_model.set_train_disjoint(False)
 
         if train_sci:
-            print("Started training a sci batch")
             predict_dict, sci_loss = model(batch)
-            print("Ended training a sci batch")
+            print(f"Sci Batch: {count}")
         else:
             sci_loss = torch.tensor(0)
             predict_dict = None
 
         if train_graph:
-            print("Started training a graph batch")
             p, planlogits = graph_model(batch)
-            print("Ended training a graph batch")
+            print(f"Graph Batch: {count}")
             p = p[:, :-1, :].contiguous()
 
             # TODO
