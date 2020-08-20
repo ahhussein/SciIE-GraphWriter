@@ -246,7 +246,6 @@ class model(nn.Module):
 
 
     outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok).cuda()
-    print(outp.get_device())
     beam = None
     for i in range(self.maxlen):
 
