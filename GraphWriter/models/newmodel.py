@@ -158,6 +158,12 @@ class model(nn.Module):
     z = (1-s)*z
     o = torch.cat((o,z),2)
     o = o+(1e-6*torch.ones_like(o))
+    print('minimum')
+    print(torch.min(o))
+    o = o.clamp(min=1e-4)
+    print('min after clamp')
+    print(torch.min(o))
+    print(torch.isnan(o).any())
     return o.log(),planlogits
 
   def maskFromList(self,size,l):
