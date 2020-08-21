@@ -55,7 +55,7 @@ def main(args):
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__5.loss-0.0.lr-0.0004980029980005"))
 
 
 
