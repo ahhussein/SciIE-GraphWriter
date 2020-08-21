@@ -1,5 +1,8 @@
 #include <torch/extension.h>
 
+#include <cstdio>
+#include <time.h>
+#include <stdlib.h>
 
 #include <iostream>
 #include <pybind11/pybind11.h>
@@ -16,6 +19,12 @@ torch::Tensor extract_spans(
     bool _sort_spans,
     bool _suppress_crossing
 ) {
+    // Log files
+    freopen( "cpp.log", "a", stdout );
+      //freopen( "error.txt", "w", stderr );
+
+   time_t givemetime = time(NULL);
+
     int num_sentences = span_scores.size(0);
     int num_input_spans = span_scores.size(1);
     int max_num_output_spans = 0;
@@ -28,19 +37,30 @@ torch::Tensor extract_spans(
       }
     }
 
+      cout << ctime(&givemetime) <<" max num outputs: " << max_num_output_spans << endl;
+
+
 
     std::vector<std::vector<int>> sorted_input_span_indices(num_sentences,
                                                             std::vector<int>(num_input_spans));
 
     torch::Tensor output_span_indices = torch::ones({num_sentences, max_num_output_spans});
 
+      cout << ctime(&givemetime) <<" Sorting span indices: Started" << endl;
+
     for (int i = 0; i < num_sentences; i++) {
       std::iota(sorted_input_span_indices[i].begin(), sorted_input_span_indices[i].end(), 0);
       std::sort(sorted_input_span_indices[i].begin(), sorted_input_span_indices[i].end(),
                 [&span_scores, &i](int j1, int j2) {
+                 if (j1 >= span_scores.size(1) || j1 < 0 || j2 >= span_scores.size(1) || j2 < 0) {
+                    return false;
+                 }
+
                   return span_scores[i][j2].item<int64_t>() < span_scores[i][j1].item<int64_t>();
                 });
     }
+      cout << ctime(&givemetime) <<" Sorting span indices: Completed" << endl;
+
 
     //for ( std::vector<int> &v : sorted_input_span_indices )
     //{
@@ -48,11 +68,17 @@ torch::Tensor extract_spans(
     //   std::cout << std::endl;
     //}
 
+
     for (int l = 0; l < num_sentences; l++) {
+      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << (l+1) << " out of: "<< num_sentences << endl;
+
       std::vector<int> top_span_indices;
       std::unordered_map<int, int> end_to_earliest_start;
       std::unordered_map<int, int> start_to_latest_end;
       int current_span_index = 0, num_selected_spans = 0;
+
+      cout << ctime(&givemetime) <<" Fauly Loop - corssing while - Started" << endl;
+
       while (num_selected_spans < num_output_spans[l].item<int64_t>() && current_span_index < num_input_spans) {
         int i = sorted_input_span_indices[l][current_span_index];
         bool any_crossing = false;
@@ -102,8 +128,13 @@ torch::Tensor extract_spans(
         }
         ++current_span_index;
       }
+
+      cout << ctime(&givemetime) <<" Fauly Loop - corssing while - Completed" << endl;
+
       // Sort and produce span indices.
       if (_sort_spans) {
+        cout << ctime(&givemetime) <<" Fauly Loop - Sort Spans - Started" << endl;
+
         std::sort(top_span_indices.begin(), top_span_indices.end(),
                 [&candidate_starts, &candidate_ends, &l] (int i1, int i2) {
                  if (i1 >= candidate_starts.size(1) || i1 < 0 || i2 >= candidate_starts.size(1) || i2 < 0) {
@@ -122,6 +153,8 @@ torch::Tensor extract_spans(
                   }
                 });
 
+        cout << ctime(&givemetime) <<" Fauly Loop - Sort Spans - Completed" << endl;
+
 
         for (int i = 0; i < num_output_spans[l].item<int64_t>(); ++i) {
           output_span_indices[l][i] = top_span_indices[i];
@@ -135,7 +168,13 @@ torch::Tensor extract_spans(
           output_span_indices[l][i]= output_span_indices[l][last_selected].item<int64_t>();
         }
       }
+      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << (l+1) << " Finished" << endl;
+
+
     }
+
+  cout <<" =======" << endl;
+
 
     return output_span_indices;
 }

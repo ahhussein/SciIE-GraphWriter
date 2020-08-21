@@ -9,6 +9,14 @@ from torch.nn import functional as F
 from torch import nn
 from optimizers import MultipleOptimizer
 from torch.utils.tensorboard import SummaryWriter
+import subprocess
+import logging
+logger = logging.getLogger('myapp')
+hdlr = logging.FileHandler('train.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.DEBUG)
 
 # Graph Writer modules
 from GraphWriter.models.newmodel import model as graph
@@ -48,12 +56,16 @@ def main(args):
     args = dynArgs(args)
 
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+        graph_model = graph(args, dataset_wrapper, logger)
+        # Move models to gpu?
+        graph_model = graph_model.to(args.device)
+
     else:
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
-        model = Model(config, dataset_wrapper)
+        model = Model(config, dataset_wrapper, logger)
+        model = model.to(args.device)
     else:
         model = None
 
@@ -90,6 +102,10 @@ def main(args):
     else:
         graph_opt = None
 
+    logger.info(f"Training Graph for: {config['train_graph_for']} epochs")
+    logger.info(f"Training SCIERC for: {config['train_sci_for']} epochs")
+    logger.info(f"Training Jointly for: {config['train_both_for']} epochs")
+    logger.info(f"Batch size: {config.batch_size}")
 
     # Combined graph and sci optimizers
     optimizer = MultipleOptimizer(optimziers)
@@ -105,10 +121,6 @@ def main(args):
             train_sci = True
         else:
             train_sci = False
-
-        print(f"Training Graph for: {config['train_graph_for']} epochs")
-        print(f"Training SCIERC for: {config['train_sci_for']} epochs")
-        print(f"Training Jointly for: {config['train_both_for']} epochs")
 
         if config['train_graph_for'] and config['train_graph_for'] > epoch:
             train_graph = True
@@ -150,10 +162,10 @@ def main(args):
         if args.lrwarm and graph_opt:
             update_lr(graph_opt, args, epoch)
 
-        print(f"epoch: {epoch + 1} - loss: {loss}")
-        print(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
+        logger.info(f"epoch: {epoch + 1} - loss: {loss}")
+        logger.info(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
 
-        print("Saving models")
+        logger.info("Saving models")
 
         if train_sci:
             torch.save(
@@ -179,7 +191,7 @@ def main(args):
 
 
 def train(model, graph_model, dataset, optimizer, writer, data_iter, device, config, offset=0, train_graph=True, train_sci=True, train_joint=False):
-    print("Training", end="\t")
+    logger.info("Training")
     l = 0
     ex = 0
     g_loss = 0
@@ -189,24 +201,50 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         batch = dataset.fix_batch(batch)
 
         if train_joint:
+            logger.info("Training Joint")
             model.set_train_disjoint(False)
             graph_model.set_train_disjoint(False)
 
         if train_sci:
-            print("Started training a sci batch")
-            predict_dict, sci_loss = model(batch)
-            print("Ended training a sci batch")
+            try:
+                predict_dict, sci_loss = model(batch)
+                logger.info(f"SCI Batch: {count}")
+            except RuntimeError as e:
+                if 'out of memory' in str(e):
+                    logger.error('| WARNING: ran out of memory, skipping sci batch')
+                    logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            del p.grad  # free some memory
+                    torch.cuda.empty_cache()
+
+                # skip batch
+                continue
         else:
             sci_loss = torch.tensor(0)
             predict_dict = None
 
         if train_graph:
-            print("Started training a graph batch")
-            p, planlogits = graph_model(batch)
-            print("Ended training a graph batch")
+            try:
+                p, planlogits = graph_model(batch)
+            except RuntimeError as e:
+                if 'out of memory' in str(e):
+                    logger.error('| WARNING: ran out of memory, skipping graph batch')
+                    logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
+
+                    for p in model.parameters():
+                        if p.grad is not None:
+                            del p.grad  # free some memory
+                    torch.cuda.empty_cache()
+
+                # skip batch
+                continue
+
+            logger.info(f"Graph Batch: {count}")
             p = p[:, :-1, :].contiguous()
 
-            # TODO
             tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
             gr_loss = F.nll_loss(p.contiguous().view(-1, p.size(2)), tgt, ignore_index=1)
         else:

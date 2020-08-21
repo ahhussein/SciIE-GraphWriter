@@ -166,8 +166,6 @@ def get_batch_topk(
         enforce_non_crossing
     )
 
-
-    # TODO why repeated indices?
     predicted_indices = predicted_indices.type(torch.int64)
     # get corresponding span starts and ends
     predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, pruned_num_candidates]
