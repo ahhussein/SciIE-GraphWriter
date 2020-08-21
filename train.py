@@ -56,7 +56,7 @@ def main(args):
     # Graph writer arguments
 
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper, logger)
+        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
         # Move models to gpu?
         graph_model = graph_model.to(args.device)
 
