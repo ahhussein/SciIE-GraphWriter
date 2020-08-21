@@ -70,7 +70,7 @@ torch::Tensor extract_spans(
 
 
     for (int l = 0; l < num_sentences; l++) {
-      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << l << " out of: "<< num_sentences << endl;
+      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << (l+1) << " out of: "<< num_sentences << endl;
 
       std::vector<int> top_span_indices;
       std::unordered_map<int, int> end_to_earliest_start;
@@ -168,7 +168,7 @@ torch::Tensor extract_spans(
           output_span_indices[l][i]= output_span_indices[l][last_selected].item<int64_t>();
         }
       }
-      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << l << " Finished" << endl;
+      cout << ctime(&givemetime) <<" Inside faulty loop - sentence " << (l+1) << " Finished" << endl;
 
 
     }
