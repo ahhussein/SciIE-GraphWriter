@@ -81,9 +81,9 @@ class Model(nn.Module):
             # score candidates
             # [num-candidates]
 
-            self.log('info', "Calculating unary scores for candidates: Started")
+            self.log('info', "unary scores - rels -- Started")
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
-            self.log('info', "Calculating unary scores for candidates: Completed")
+            self.log('info', "unary scores - rels -- Completed")
 
 
             # Get flat candidate scores in the original shape # [num_sentences, max_num_candidates]
@@ -93,17 +93,19 @@ class Model(nn.Module):
             # entity_starts = entity_ends = entity_scores(same score as candidate_entity_scores but pruned) = [num_sentences, max_num_ents]
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
-            self.log('info', "Getting batch topk for relations: Started")
+            self.log('info', "topk - relations -- Started")
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False
             )
-            self.log('info', "Getting batch topk for relations: Completed")
+            self.log('info', "topk - relations -- Completed")
 
 
             # [num_sentences, max_num_ents]
             # absolute indices (offset added)
             entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
+
+            self.log('info', 'gather candidates completed')
 
             # [num_sentences, max_num_ents, emb]
             entity_emb = candidate_span_emb[entity_span_indices]
@@ -128,10 +130,10 @@ class Model(nn.Module):
             # score mentions
             # [num-candidates]
             # Score independent from relation pruning
-            self.log('info', "Getting batch topk for mentions: Started")
+            self.log('info', "unary scores - mentions -- Started")
             candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
             doc_ids = batch.doc_id.unsqueeze(1)
-            self.log('info', "Getting batch topk for mentions: Completed")
+            self.log('info', "unary scores - mentions -- Completed")
 
 
             candidate_doc_ids = torch.masked_select(
@@ -143,7 +145,7 @@ class Model(nn.Module):
 
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
-            self.log('info', "Getting batch topk for mentions: Started")
+            self.log('info', "topk -- mentions -- Started")
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -153,7 +155,7 @@ class Model(nn.Module):
                 True,
                 True
             )  # [1, topk]
-            self.log('info', "Getting batch topk for mentions: Completed")
+            self.log('info', "topk -- mentions -- Completed")
 
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
 
@@ -214,11 +216,11 @@ class Model(nn.Module):
             antecedent_log_mask = torch.log(antecedent_mask.type(torch.float32))  # [k, max_ant]
 
             # [k, max_ant], [k, max_ant, emb], [k, max_ant, emb2]
-            self.log('info', "Calculating antecendent scores: Started")
+            self.log('info', "antecendent - scores -- Started")
             antecedent_scores, antecedent_emb, pair_emb = self.antecedent_scores(
                 mention_emb, mention_scores, antecedents
             )  # [k, max_ant]
-            self.log('info', "Calculating antecendent scores: Completed")
+            self.log('info', "antecendent - scores -- Completed")
 
             # zero out (out of document range) score and -index scores - mention zero
             antecedent_scores = torch.cat([
@@ -239,7 +241,7 @@ class Model(nn.Module):
             )  # [num_sentences, max_num_ents, max_num_ents]
 
             # TODO rel mask is needed here to avoid the padding
-            self.log('info', "Calculating rel scores: Started")
+            self.log('info', "rel - scores -- Started")
 
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,  # [num_sentences, max_num_ents, emb]
@@ -247,7 +249,7 @@ class Model(nn.Module):
                 rel_labels,  # [num_sentences, max_num_ents, max_num_ents]
                 num_entities
             )  # [num_sentences, max_num_ents, max_num_ents, num_labels]
-            self.log('info', "Calculating rel scores: Completed")
+            self.log('info', "rel - scores -- Completed")
 
             # Rearrange scores
             flattened_scores = rel_scores.view(-1, 8)
