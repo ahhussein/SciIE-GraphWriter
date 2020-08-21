@@ -74,6 +74,7 @@ def main(args):
             torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
             doc_batch = dataset.fix_batch(batch)
+            logger.info(f"Batch #: {(count+1)}")
             logger.info(f"Batch size: {doc_batch.text_len}")
             logger.info(f"Batch key: {doc_batch.doc_key}")
             evaluator.evaluate(doc_batch)
