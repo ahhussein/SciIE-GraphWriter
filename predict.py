@@ -47,7 +47,7 @@ def main():
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(
