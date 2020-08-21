@@ -50,7 +50,7 @@ def main(args):
 
     model.to(args.device)
 
-    evaluator = Evaluator(config, dataset, model)
+    evaluator = Evaluator(config, dataset, model, logger)
 
     # TODO log
     log_dir = config["log_dir"]
