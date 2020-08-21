@@ -8,8 +8,17 @@ from evaluator import Evaluator
 from eval_iter import EvalIterator
 from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
+import logging
 
 torch.manual_seed(0)
+
+logger = logging.getLogger('myapp')
+hdlr = logging.FileHandler('predict.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.DEBUG)
+
 
 
 
@@ -37,7 +46,7 @@ def main(args):
 
     config.device = args.device
 
-    model = Model(config, dataset)
+    model = Model(config, dataset, logger)
 
     model.to(args.device)
 
@@ -46,7 +55,7 @@ def main(args):
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
 
 
 
