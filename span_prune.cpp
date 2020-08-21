@@ -20,7 +20,7 @@ torch::Tensor extract_spans(
     bool _suppress_crossing
 ) {
     // Log files
-    freopen( "cpp.log", "w", stdout );
+    freopen( "cpp.log", "a", stdout );
       //freopen( "error.txt", "w", stderr );
 
    time_t givemetime = time(NULL);
@@ -172,6 +172,9 @@ torch::Tensor extract_spans(
 
 
     }
+
+  cout <<" =======" << endl;
+
 
     return output_span_indices;
 }
