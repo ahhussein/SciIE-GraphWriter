@@ -105,8 +105,6 @@ class Model(nn.Module):
             # absolute indices (offset added)
             entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
 
-            self.log('info', 'gather candidates completed')
-
             # [num_sentences, max_num_ents, emb]
             entity_emb = candidate_span_emb[entity_span_indices]
 
@@ -367,6 +365,8 @@ class Model(nn.Module):
                 flat_candidate_starts,
                 flat_candidate_ends
             )
+
+        self.log('info', 'mode batch completed')
 
         return predict_dict, loss
 
