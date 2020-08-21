@@ -7,8 +7,17 @@ import torch
 from evaluator import Evaluator
 from eval_iter import EvalIterator
 from torchtext import data
+import logging
 
 torch.manual_seed(0)
+
+logger = logging.getLogger('myapp')
+hdlr = logging.FileHandler('predict.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.DEBUG)
+
 
 
 def main():
@@ -31,7 +40,7 @@ def main():
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    model = Model(config, dataset)
+    model = Model(config, dataset, logger)
 
     evaluator = Evaluator(config, dataset, model)
 

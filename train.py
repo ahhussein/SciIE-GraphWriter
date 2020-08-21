@@ -56,12 +56,16 @@ def main(args):
     args = dynArgs(args)
 
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper, logger)
+        # Move models to gpu?
+        graph_model = graph_model.to(args.device)
+
     else:
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
-        model = Model(config, dataset_wrapper)
+        model = Model(config, dataset_wrapper, logger)
+        model = model.to(args.device)
     else:
         model = None
 
@@ -209,6 +213,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 if 'out of memory' in str(e):
                     logger.error('| WARNING: ran out of memory, skipping sci batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
                     for p in model.parameters():
                         if p.grad is not None:
                             del p.grad  # free some memory
@@ -227,6 +232,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 if 'out of memory' in str(e):
                     logger.error('| WARNING: ran out of memory, skipping graph batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
+
                     for p in model.parameters():
                         if p.grad is not None:
                             del p.grad  # free some memory
