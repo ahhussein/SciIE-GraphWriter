@@ -155,7 +155,6 @@ class Model(nn.Module):
             )  # [1, topk]
             self.log('info', "Getting batch topk for mentions: Completed")
 
-
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
 
             mention_starts = flat_candidate_starts[top_mention_indices]  # [k]
