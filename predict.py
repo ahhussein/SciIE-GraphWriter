@@ -42,7 +42,9 @@ def main():
 
     model = Model(config, dataset, logger)
 
-    evaluator = Evaluator(config, dataset, model)
+    model.to(args.device)
+
+    evaluator = Evaluator(config, dataset, model, logger)
 
     # TODO log
     log_dir = config["log_dir"]

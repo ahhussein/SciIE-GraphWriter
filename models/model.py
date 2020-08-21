@@ -367,7 +367,7 @@ class Model(nn.Module):
                 flat_candidate_ends
             )
 
-        self.log('info', 'mode batch completed')
+        self.log('info', 'model batch completed')
 
         return predict_dict, loss
 
