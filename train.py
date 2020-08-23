@@ -11,6 +11,8 @@ from optimizers import MultipleOptimizer
 from torch.utils.tensorboard import SummaryWriter
 import subprocess
 import logging
+from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
+
 logger = logging.getLogger('myapp')
 hdlr = logging.FileHandler('train.log')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -55,8 +57,10 @@ def main(args):
 
     # Graph writer arguments
 
+    embedding_wrapper = SpanEmbeddingsWrapper(config, dataset_wrapper)
+
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+        graph_model = graph(args, config, dataset_wrapper, embedding_wrapper, logger)
         # Move models to gpu?
         graph_model = graph_model.to(args.device)
 
@@ -64,7 +68,7 @@ def main(args):
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
-        model = Model(config, dataset_wrapper, logger)
+        model = Model(config, dataset_wrapper, embedding_wrapper, logger)
         model = model.to(args.device)
     else:
         model = None
@@ -205,8 +209,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         if train_sci:
             try:
-                predict_dict, sci_loss = model(batch)
                 logger.info(f"SCI Batch: {count}")
+                predict_dict, sci_loss = model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
                     logger.error('| WARNING: ran out of memory, skipping sci batch')
@@ -225,6 +229,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         if train_graph:
             try:
+                logger.info(f"Graph Batch: {count}")
                 p, planlogits = graph_model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
@@ -240,7 +245,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 # skip batch
                 continue
 
-            logger.info(f"Graph Batch: {count}")
             p = p[:, :-1, :].contiguous()
 
             tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)

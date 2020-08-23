@@ -79,7 +79,7 @@ class DocumentDataset():
             ("out", self.out),
             ("tgt", self.tgt),
             ("adj", data.RawField()),
-            ("rels", data.RawField()),
+            ("relsraw", data.RawField()),
             ("nerd", self.nerd),
             ("rawent", data.RawField()),
             ("rawout", self.rawout),
@@ -203,7 +203,7 @@ class DocumentDataset():
             example.tgt = tgt_text
             example.nerd = nerd
             example.adj = adj
-            example.rels = rel
+            example.relsraw = rel
             example.rawent = ents
             example.rawout = raw_out
 
@@ -269,7 +269,7 @@ class DocumentDataset():
             example.tgt = tgt_text
             example.nerd = nerd
             example.adj = adj
-            example.rels = rel
+            example.relsraw = rel
             example.rawent = raw_ent
             example.rawout = raw_out
 
@@ -324,7 +324,7 @@ class DocumentDataset():
             example.tgt = tgt_text
             example.nerd = nerd
             example.adj = adj
-            example.rels = rel
+            example.relsraw = rel
             example.rawent = ents
             example.rawout = raw_out
 
@@ -479,7 +479,7 @@ class DocumentDataset():
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out', 'adj', 'rels', 'tgt', 'rawent', 'nerd', 'rawout']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'relsraw', 'tgt', 'rawent', 'nerd', 'rawout']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
