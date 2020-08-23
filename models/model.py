@@ -7,26 +7,23 @@ from models.antecedent_score import AntecedentScore
 import data_utils
 import util
 import span_prune_cpp
-from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
 import numpy as np
 
 class Model(nn.Module):
-    def __init__(self, config, data, logger=None):
+    def __init__(self, config, data, span_wrapper, logger=None):
         super().__init__()
         self.config = config
         self.data = data
         self.embeddings = Embeddings(config, data)
         self.lstm = LSTMContextualize(config, data)
-        self.span_embeddings_wrapper = SpanEmbeddingsWrapper(config, data, generate_candidates=True)
+        self.span_embeddings_wrapper = span_wrapper
         self.unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
         self.rel_scores = RelScores(config, len(self.data.rel_labels))
         self.ner_scores = NerScores(config, len(self.data.ner_labels))
         self.train_disjoint=True
-        # TODO investigate the no-relation link
         self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
-        # TODO try without project
         self.emb_projection = nn.Linear(1270, 500)
 
         self.logger = logger
@@ -51,7 +48,7 @@ class Model(nn.Module):
             flat_context_emb,
             flat_head_emb,
             batch_word_offset
-        ) = self.span_embeddings_wrapper(batch)
+        ) = self.span_embeddings_wrapper(batch, True)
 
         doc_len = flat_context_emb.shape[0]
 
@@ -95,7 +92,7 @@ class Model(nn.Module):
             # top_entity_indices = [num_sentences, max_num_ents]
             self.log('info', "topk - relations -- Started")
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
-                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"]*0.01,
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
             self.log('info', "topk - relations -- Completed")
