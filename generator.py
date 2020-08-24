@@ -1,13 +1,13 @@
 import torch
-import argparse
-from time import time
 from document_dataset import DocumentDataset
 from GraphWriter.models.newmodel import model as graph
 from GraphWriter.pargs import pargs,dynArgs
-from models.model import Model
 import util
 import os
 from torchtext import data
+from models.vertex_embeddings import VertexEmbeddings
+from torch import nn
+
 
 #import utils.eval as evalMetrics
 

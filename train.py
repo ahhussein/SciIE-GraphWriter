@@ -11,7 +11,7 @@ from optimizers import MultipleOptimizer
 from torch.utils.tensorboard import SummaryWriter
 import subprocess
 import logging
-from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
+from models.vertex_embeddings import VertexEmbeddings
 
 logger = logging.getLogger('myapp')
 hdlr = logging.FileHandler('train.log')
@@ -53,14 +53,13 @@ def main(args):
     writer = SummaryWriter(log_dir=config['log_dir'])
 
     dataset_wrapper = DocumentDataset(config)
+    vertex_embeddings = VertexEmbeddings(config, dataset_wrapper)
 
     # Graph writer arguments
     args = dynArgs(args)
 
-    embedding_wrapper = SpanEmbeddingsWrapper(config, dataset_wrapper)
-
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, config, dataset_wrapper, embedding_wrapper, logger)
+        graph_model = graph(args, config, dataset_wrapper, vertex_embeddings, logger)
         # Move models to gpu?
         graph_model = graph_model.to(args.device)
 
@@ -68,7 +67,7 @@ def main(args):
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
-        model = Model(config, dataset_wrapper, embedding_wrapper, logger)
+        model = Model(config, dataset_wrapper, vertex_embeddings, logger)
         model = model.to(args.device)
     else:
         model = None
@@ -171,16 +170,22 @@ def main(args):
 
         logger.info("Saving models")
 
-        if train_sci:
-            torch.save(
-                model.state_dict(),
-                f"{config['log_dir']}/model__{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
-            )
+        if True: #epoch % 5 == 0:
+            if train_sci:
+                torch.save(
+                    model.state_dict(),
+                    f"{config['log_dir']}/model__{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
+                )
 
-        if train_graph:
+            if train_graph:
+                torch.save(
+                    graph_model.state_dict(),
+                    f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
+                )
+
             torch.save(
-                graph_model.state_dict(),
-                f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
+                vertex_embeddings.state_dict(),
+                f"{config['log_dir']}/vertex_embeddings__{epoch + 1}"
             )
 
         writer.add_scalar('train/loss', loss, epoch)

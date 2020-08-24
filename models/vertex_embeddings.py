@@ -6,7 +6,7 @@ from models.lstm import LSTMContextualize
 import data_utils
 from models.span_embeddings import SpanEmbeddings
 
-class SpanEmbeddingsWrapper(nn.Module):
+class VertexEmbeddings(nn.Module):
     def __init__(self, config, data):
         super().__init__()
         self.embeddings = Embeddings(config, data)
@@ -15,7 +15,7 @@ class SpanEmbeddingsWrapper(nn.Module):
         self.config = config
         self.emb_projection = nn.Linear(1270, 500)
         torch.nn.init.xavier_uniform_(self.emb_projection.weight)
-
+        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
     def forward(self, batch, generate_candiadtes=True):
         # max sentence length in terms of number of words

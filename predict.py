@@ -5,9 +5,12 @@ from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
-from eval_iter import EvalIterator
+from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
 import logging
+from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
+from torch import nn
+
 
 torch.manual_seed(0)
 
@@ -40,7 +43,10 @@ def main():
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    model = Model(config, dataset, logger)
+    embedding_wrapper = SpanEmbeddingsWrapper(config, dataset)
+    rel_embs = nn.Embedding(2 * len(dataset.rel_labels_extended) - 1, 500)
+
+    model = Model(config, dataset, embedding_wrapper, rel_embs, logger)
 
     model.to(args.device)
 
