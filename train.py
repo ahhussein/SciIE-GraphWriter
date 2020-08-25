@@ -222,6 +222,25 @@ def main(args):
         writer.add_scalar('train/gr_loss', gr_loss, epoch)
         writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
 
+    offset = 0
+    # joint training
+    data_iter = data.Iterator(
+        dataset_wrapper.dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=True
+    )
+
+    val_iter = data.Iterator(
+        dataset_wrapper.val_dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
     for epoch in range(config['train_both_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
