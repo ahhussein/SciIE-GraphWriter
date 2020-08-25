@@ -207,6 +207,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     sc_loss = 0
     total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
+        if count > 10:
+            break
         batch = dataset.fix_batch(batch)
 
         if train_joint:
@@ -248,7 +250,8 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                         if p.grad is not None:
                             del p.grad  # free some memory
                     torch.cuda.empty_cache()
-
+                else:
+                    raise e
                 # skip batch
                 continue
 
@@ -322,6 +325,8 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
     gr_loss = 0
     count = 1
     for count, batch in enumerate(data_iter):
+        if count > 1:
+            break
         with torch.no_grad():
             batch = dataset.fix_batch(batch)
 

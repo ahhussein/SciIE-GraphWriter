@@ -24,8 +24,6 @@ class Model(nn.Module):
         self.train_disjoint=True
         self.rel_embs = vertex_embeddings.rel_embs
 
-        self.emb_projection = nn.Linear(1270, 500)
-
         self.logger = logger
 
     def set_train_disjoint(self, value):
@@ -252,35 +250,36 @@ class Model(nn.Module):
             masked_flattened_scores = flattened_scores[rel_loss_mask.view(-1)].view(-1)
 
             # Build graphs per document
-            batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
-                                                                      masked_flattened_scores, num_doc_entities,
-                                                                      mention_idx, antecedent_scores, antecedent_mask)
+            if not self.train_disjoint:
+                batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
+                                                                          masked_flattened_scores, num_doc_entities,
+                                                                          mention_idx, antecedent_scores, antecedent_mask)
 
-            rel_indices = []
-            for idx, sent_entities in enumerate(num_entities):
-                for entity1_idx in range(sent_entities):
-                    for entity2_idx in range(sent_entities):
-                        if entity1_idx < entity2_idx:
-                            rel_indices.extend(range(len(self.data.rel_labels)))
-                            continue
+                rel_indices = []
+                for idx, sent_entities in enumerate(num_entities):
+                    for entity1_idx in range(sent_entities):
+                        for entity2_idx in range(sent_entities):
+                            if entity1_idx < entity2_idx:
+                                rel_indices.extend(range(len(self.data.rel_labels)))
+                                continue
 
-                        if entity1_idx == entity2_idx:
-                            rel_indices.extend(range(len(self.data.rel_labels)))
-                            continue
+                            if entity1_idx == entity2_idx:
+                                rel_indices.extend(range(len(self.data.rel_labels)))
+                                continue
 
-                        rel_indices.extend(range(
-                            len(self.data.rel_labels_extended),
-                            len(self.data.rel_labels_extended) + len(self.data.rel_labels),
-                        ))
-            rel_indices = torch.tensor(rel_indices)
+                            rel_indices.extend(range(
+                                len(self.data.rel_labels_extended),
+                                len(self.data.rel_labels_extended) + len(self.data.rel_labels),
+                            ))
+                rel_indices = torch.tensor(rel_indices)
 
-            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
-                top_spans,
-                num_doc_entities,
-                rel_indices,
-                rel_lengths,
-                coref_lengths
-            )
+                batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
+                    top_spans,
+                    num_doc_entities,
+                    rel_indices,
+                    rel_lengths,
+                    coref_lengths
+                )
 
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]

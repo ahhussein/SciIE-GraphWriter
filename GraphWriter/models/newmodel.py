@@ -182,7 +182,7 @@ class model(nn.Module):
       tencs,_ = self.tenc(b.src)
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
 
-    ent_embs = self.vertex_embeddings(b)[4]
+    ent_embs = self.vertex_embeddings(b, False)[4]
     entlens = []
     offset = 0
     for count, nlen in enumerate(b.doc_len):

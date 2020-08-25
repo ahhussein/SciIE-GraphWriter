@@ -8,7 +8,7 @@ from evaluator import Evaluator
 from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
 import logging
-from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
+from models.vertex_embeddings import VertexEmbeddings
 from torch import nn
 
 
@@ -41,14 +41,15 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
+    vertex_model_name = 'vertex_embeddings__1'
+
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    embedding_wrapper = SpanEmbeddingsWrapper(config, dataset)
-    rel_embs = nn.Embedding(2 * len(dataset.rel_labels_extended) - 1, 500)
+    vertex_embeddings = VertexEmbeddings(config, dataset)
 
-    model = Model(config, dataset, embedding_wrapper, rel_embs, logger)
+    model = Model(config, dataset, vertex_embeddings, logger)
 
-    model.to(args.device)
+    #model.to(args.device)
 
     evaluator = Evaluator(config, dataset, model, logger)
 
@@ -56,6 +57,9 @@ def main():
     log_dir = config["log_dir"]
 
     model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
+
+    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
+    vertex_embeddings.load_state_dict(vertex_cpt)
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(

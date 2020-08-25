@@ -80,7 +80,7 @@ class VertexEmbeddings(nn.Module):
             flat_candidate_starts,
             flat_candidate_ends
         )
-
+        # TODO check projection
         # Project entity embs to lower space
         candidate_span_emb = self.emb_projection(candidate_span_emb)
 
