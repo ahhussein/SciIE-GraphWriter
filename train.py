@@ -221,6 +221,25 @@ def main(args):
         writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
 
     offset = 0
+    # joint training
+    data_iter = data.Iterator(
+        dataset_wrapper.dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=True
+    )
+
+    val_iter = data.Iterator(
+        dataset_wrapper.val_dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
+
     for epoch in range(config['train_both_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
@@ -297,7 +316,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             model.set_train_disjoint(False)
             graph_model.set_train_disjoint(False)
 
-        if train_sci:
+        if train_sci or train_joint:
             try:
                 logger.info(f"SCI Batch: {count}")
                 predict_dict, sci_loss = model(batch)
@@ -319,7 +338,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             sci_loss = torch.tensor(0)
             predict_dict = None
 
-        if train_graph:
+        if train_graph or train_joint:
             try:
                 logger.info(f"Graph Batch: {count}")
                 p, planlogits = graph_model(batch)
@@ -360,10 +379,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
 
         step_list = []
-        if train_graph:
+        if train_graph or train_joint:
             step_list.append('graph')
 
-        if train_sci:
+        if train_sci or train_joint:
             step_list.append('sci')
 
         optimizer.step(step_list)
