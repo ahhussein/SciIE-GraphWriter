@@ -310,8 +310,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
     sc_loss = 0
     total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
-        if count > 10:
-            break
         batch = dataset.fix_batch(batch)
 
         if train_joint:
@@ -319,7 +317,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             model.set_train_disjoint(False)
             graph_model.set_train_disjoint(False)
 
-        if train_sci:
+        if train_sci or train_joint:
             try:
                 logger.info(f"SCI Batch: {count}")
                 predict_dict, sci_loss = model(batch)
@@ -341,7 +339,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             sci_loss = torch.tensor(0)
             predict_dict = None
 
-        if train_graph:
+        if train_graph or train_joint:
             try:
                 logger.info(f"Graph Batch: {count}")
                 p, planlogits = graph_model(batch)
@@ -382,10 +380,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
 
         step_list = []
-        if train_graph:
+        if train_graph or train_joint:
             step_list.append('graph')
 
-        if train_sci:
+        if train_sci or train_joint:
             step_list.append('sci')
 
         optimizer.step(step_list)
@@ -430,8 +428,6 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
     gr_loss = 0
     count = 1
     for count, batch in enumerate(data_iter):
-        if count > 1:
-            break
         with torch.no_grad():
             batch = dataset.fix_batch(batch)
 
