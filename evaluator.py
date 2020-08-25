@@ -17,7 +17,7 @@ class Evaluator:
         self.eval_data = self.dataset.eval_data
         self.coref_eval_data = self.dataset.coref_eval_data
         self.model = model
-        self.debug_printer = debug_utils.DebugPrinter()
+        #self.debug_printer = debug_utils.DebugPrinter()
         self.start_time = time.time()
         self.ner_predictions = []
         self.rel_predictions = []
@@ -116,7 +116,8 @@ class Evaluator:
             else:
                 return "{}%".format(k)
 
-        self.debug_printer.close()
+
+        #self.debug_printer.close()
         summary_dict = {}
         task_to_f1 = {}  # From task name to F1.
         elapsed_time = time.time() - self.start_time

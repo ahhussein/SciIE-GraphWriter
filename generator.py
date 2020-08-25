@@ -1,13 +1,13 @@
 import torch
-import argparse
-from time import time
 from document_dataset import DocumentDataset
 from GraphWriter.models.newmodel import model as graph
 from GraphWriter.pargs import pargs,dynArgs
-from models.model import Model
 import util
 import os
 from torchtext import data
+from models.vertex_embeddings import VertexEmbeddings
+from torch import nn
+
 
 #import utils.eval as evalMetrics
 
@@ -92,7 +92,8 @@ if __name__=="__main__":
   # sci_model_name = 'model__4.loss-86.47219597952706.lr-0.0004985014995'
   # sci_model_name = 'model__3.loss-102.81670368739537.lr-0.0004990005'
 
-  graph_model_name = 'graph_model__41.loss-0.0.lr-0.05'
+  graph_model_name = 'graph_model__1.loss-0.0.lr-0.02'
+  vertex_model_name = 'vertex_embeddings__1'
   #graph_model_name = 'graph_model__3.loss-102.81670368739537.lr-0.1'
 
   args = pargs()
@@ -110,10 +111,14 @@ if __name__=="__main__":
   #model.load_state_dict(sci_cpt)
 
   # Load graph model
-  graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+  vertex_embeddings = VertexEmbeddings(config, dataset_wrapper)
+  graph_model = graph(args, dataset_wrapper.config, dataset_wrapper, vertex_embeddings)
   graph_cpt = torch.load(f"{config['log_dir']}/{graph_model_name}", map_location='cuda:0')
   graph_model.load_state_dict(graph_cpt)
   m = graph_model.to(args.device)
+  vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
+  vertex_embeddings.load_state_dict(vertex_cpt)
+
   graph_model.args = args
   graph_model.maxlen = args.max
 

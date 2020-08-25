@@ -10,19 +10,21 @@ import span_prune_cpp
 import numpy as np
 
 class Model(nn.Module):
-    def __init__(self, config, data, vertex_embeddings, logger=None):
+    def __init__(self, config, data, span_wrapper, rel_embs, logger=None):
         super().__init__()
         self.config = config
         self.data = data
         self.embeddings = Embeddings(config, data)
         self.lstm = LSTMContextualize(config, data)
-        self.vertex_embeddings = vertex_embeddings
+        self.span_embeddings_wrapper = span_wrapper
         self.unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
         self.rel_scores = RelScores(config, len(self.data.rel_labels))
         self.ner_scores = NerScores(config, len(self.data.ner_labels))
         self.train_disjoint=True
-        self.rel_embs = vertex_embeddings.rel_embs
+        self.rel_embs = rel_embs
+
+        self.emb_projection = nn.Linear(1270, 500)
 
         self.logger = logger
 
@@ -46,7 +48,7 @@ class Model(nn.Module):
             flat_context_emb,
             flat_head_emb,
             batch_word_offset
-        ) = self.vertex_embeddings(batch, True)
+        ) = self.span_embeddings_wrapper(batch, True)
 
         doc_len = flat_context_emb.shape[0]
 
@@ -249,36 +251,35 @@ class Model(nn.Module):
             masked_flattened_scores = flattened_scores[rel_loss_mask.view(-1)].view(-1)
 
             # Build graphs per document
-            if not self.train_disjoint:
-                batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
-                                                                          masked_flattened_scores, num_doc_entities,
-                                                                          mention_idx, antecedent_scores, antecedent_mask)
+            batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
+                                                                      masked_flattened_scores, num_doc_entities,
+                                                                      mention_idx, antecedent_scores, antecedent_mask)
 
-                rel_indices = []
-                for idx, sent_entities in enumerate(num_entities):
-                    for entity1_idx in range(sent_entities):
-                        for entity2_idx in range(sent_entities):
-                            if entity1_idx < entity2_idx:
-                                rel_indices.extend(range(len(self.data.rel_labels)))
-                                continue
+            rel_indices = []
+            for idx, sent_entities in enumerate(num_entities):
+                for entity1_idx in range(sent_entities):
+                    for entity2_idx in range(sent_entities):
+                        if entity1_idx < entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
 
-                            if entity1_idx == entity2_idx:
-                                rel_indices.extend(range(len(self.data.rel_labels)))
-                                continue
+                        if entity1_idx == entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
 
-                            rel_indices.extend(range(
-                                len(self.data.rel_labels_extended),
-                                len(self.data.rel_labels_extended) + len(self.data.rel_labels),
-                            ))
-                rel_indices = torch.tensor(rel_indices)
+                        rel_indices.extend(range(
+                            len(self.data.rel_labels_extended),
+                            len(self.data.rel_labels_extended) + len(self.data.rel_labels),
+                        ))
+            rel_indices = torch.tensor(rel_indices)
 
-                batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
-                    top_spans,
-                    num_doc_entities,
-                    rel_indices,
-                    rel_lengths,
-                    coref_lengths
-                )
+            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
+                top_spans,
+                num_doc_entities,
+                rel_indices,
+                rel_lengths,
+                coref_lengths
+            )
 
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
@@ -501,7 +502,7 @@ class Model(nn.Module):
         return adj, rel_lengths, coref_lengths
 
     def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths):
-        out = self.vertex_embeddings.pad_entities(top_spans, ent_len)
+        out = self.span_embeddings_wrapper.pad_entities(top_spans, ent_len)
 
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)

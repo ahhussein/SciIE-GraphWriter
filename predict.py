@@ -5,10 +5,11 @@ from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
-from eval_iter import EvalIterator
 from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
 import logging
+from models.vertex_embeddings import VertexEmbeddings
+
 
 torch.manual_seed(0)
 
@@ -40,24 +41,30 @@ def main(args):
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
+    vertex_model_name = 'vertex_embeddings__1'
+
     args = dynArgs(args)
 
     dataset = DocumentDataset(config, args, True)
 
     config.device = args.device
 
-    model = Model(config, dataset, logger)
+    vertex_embeddings = VertexEmbeddings(config, dataset)
 
-    model.to(args.device)
+    model = Model(config, dataset, vertex_embeddings, logger)
+
+    #model.to(args.device)
 
     evaluator = Evaluator(config, dataset, model, logger)
 
-    # TODO log
     log_dir = config["log_dir"]
 
     model.load_state_dict(torch.load(f"{log_dir}/model__5.loss-0.0.lr-0.0004980029980005"))
 
 
+
+    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
+    vertex_embeddings.load_state_dict(vertex_cpt)
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(
