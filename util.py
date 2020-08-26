@@ -8,6 +8,7 @@ import codecs
 import subprocess
 import math
 from sklearn.metrics import classification_report, precision_recall_fscore_support
+import psutil
 
 from pip._vendor.requests.models import CONTENT_CHUNK_SIZE, Response
 
@@ -18,6 +19,13 @@ if MYPY_CHECK_RUNNING:
 
 def get_config(filename):
     return pyhocon.ConfigFactory.parse_file(filename)
+
+def get_used_memory():
+    return dict(psutil.virtual_memory()._asdict())['used'] / (1024 * 1024 * 1024)
+
+def get_free_memory():
+    return dict(psutil.virtual_memory()._asdict())['free'] / (1024 * 1024 * 1024)
+
 
 
 def mkdirs(path):
@@ -151,9 +159,6 @@ def get_batch_topk(
     )
 
     # [num_sentences, pruned_num_candidates = max(topk)]
-    min = -sys.maxsize - 1
-    candidate_scores[candidate_scores == float('-inf')] = min
-
     predicted_indices = span_prune_cpp.extract_spans(
         candidate_scores,
         candidate_starts,

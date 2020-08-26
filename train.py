@@ -433,13 +433,13 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
                 model.set_train_disjoint(False)
                 graph_model.set_train_disjoint(False)
 
-            if train_sci:
+            if train_sci or train_joint:
                 predict_dict, sci_loss = model(batch)
             else:
                 sci_loss = torch.tensor(0)
                 predict_dict = None
 
-            if train_graph:
+            if train_graph or train_joint:
                 p, planlogits = graph_model(batch)
 
                 p = p[:, :-1, :].contiguous()

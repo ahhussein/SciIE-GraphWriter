@@ -9,6 +9,7 @@ import util
 import span_prune_cpp
 import numpy as np
 
+
 class Model(nn.Module):
     def __init__(self, config, data, vertex_embeddings, logger=None):
         super().__init__()
@@ -92,8 +93,13 @@ class Model(nn.Module):
             # Crossing is allowed which means it can return overlapping spans
 
             assert not torch.isnan(candidate_entity_scores).any()
+            candidate_entity_scores[candidate_entity_scores == float('-inf')] = -1e9
+
             self.log('info', f'min candidate entity score: {torch.min(candidate_entity_scores)}')
             self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
+
+
+            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False
@@ -148,6 +154,7 @@ class Model(nn.Module):
             assert not torch.isnan(candidate_mention_scores).any()
             self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
             self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
+            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -370,8 +377,6 @@ class Model(nn.Module):
                 flat_candidate_starts,
                 flat_candidate_ends
             )
-
-        self.log('info', 'model batch completed')
 
         return predict_dict, loss
 
