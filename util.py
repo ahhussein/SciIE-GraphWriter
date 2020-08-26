@@ -154,7 +154,6 @@ def get_batch_topk(
     min = -sys.maxsize - 1
     candidate_scores[candidate_scores == float('-inf')] = min
 
-    # TODO: go through the pruning algorithm
     predicted_indices = span_prune_cpp.extract_spans(
         candidate_scores,
         candidate_starts,
