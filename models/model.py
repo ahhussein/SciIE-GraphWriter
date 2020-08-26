@@ -89,8 +89,13 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             self.log('info', "topk - relations -- Started")
+            # Crossing is allowed which means it can return overlapping spans
+
+            assert not torch.isnan(candidate_entity_scores).any()
+            self.log('info', f'min candidate entity score: {torch.min(candidate_entity_scores)}')
+            self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
-                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"]*0.01,
+                candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
             )
             self.log('info', "topk - relations -- Completed")
@@ -138,7 +143,11 @@ class Model(nn.Module):
 
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
+            # Crossing is not allowed which means it will always returns spans that doesn't overlap with each other
             self.log('info', "topk -- mentions -- Started")
+            assert not torch.isnan(candidate_mention_scores).any()
+            self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
+            self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
