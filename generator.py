@@ -55,10 +55,8 @@ def test(args,ds, graph_model,epoch='cmdline'):
       # sci_model(b)
       gen = graph_model.beam_generate(b,beamsz=4,k=6)
       gen.sort()
-      # TODO pass ents
       gen = ds.reverse(gen.done[0].words,b.rawent)
       k+=1
-      # TODO pass ents
       gold = ds.reverse(b.out[0][0][1:],b.rawent)
       print(gold)
       print(gen)

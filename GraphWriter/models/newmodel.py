@@ -23,6 +23,7 @@ class model(nn.Module):
       #args.tgttoks # TODO target tokens
       config.ntoks
     )
+    self.ntoks = config.ntoks
 
     torch.nn.init.xavier_uniform_(self.out.weight)
 
@@ -168,9 +169,9 @@ class model(nn.Module):
     return mask
     
   def emb_w_vertex(self,outp,vertex):
-    mask = outp>=self.args.ntoks
+    mask = outp>=self.ntoks
     if mask.sum()>0:
-      idxs = (outp-self.args.ntoks)
+      idxs = (outp-self.ntoks)
       idxs = idxs[mask]
       verts = vertex.index_select(0,idxs)
       outp.masked_scatter_(mask,verts)
@@ -233,7 +234,6 @@ class model(nn.Module):
     outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
     beam = None
     for i in range(self.maxlen):
-
       op = self.emb_w_vertex(outp.clone(),b.nerd)
       if self.args.plan:
         schange = op==self.args.dottok
@@ -258,7 +258,6 @@ class model(nn.Module):
       o = self.out(l)
       o = torch.softmax(o,2)
 
-      # TODO copy
       o = s*o
       #compute copy attn
       _, z = self.mattn(l,(ents,entlens))
@@ -281,7 +280,7 @@ class model(nn.Module):
       scores, words = decoded.topk(dim=2,k=k)
       if not beam:
         beam = Beam(words.squeeze(),scores.squeeze(),[hx for i in range(beamsz)],
-                  [cx for i in range(beamsz)],[a for i in range(beamsz)],beamsz,k,self.args.ntoks)
+                  [cx for i in range(beamsz)],[a for i in range(beamsz)],beamsz,k,self.ntoks)
         beam.endtok = self.endtok
         beam.eostok = self.eostok
         keys = keys.repeat(len(beam.beam),1,1)
