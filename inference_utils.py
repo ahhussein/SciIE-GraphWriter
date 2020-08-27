@@ -32,7 +32,7 @@ def mtl_decode(sentences, predict_dict, ner_labels_inv, rel_labels_inv, config):
                             ent_starts[j], ent_ends[j], ent_starts[k], ent_ends[k],
                             rel_labels_inv[pred]])
         if "ner" in predictions:
-            ner_spans, _, _ = _dp_decode_non_overlapping_spans(
+            ner_spans = _dp_decode_non_overlapping_spans(
                 predict_dict["candidate_starts"][i],
                 predict_dict["candidate_ends"][i],
                 # [num_sentences, max_num_candidates, num_labels]
