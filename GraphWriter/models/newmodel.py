@@ -171,17 +171,8 @@ class model(nn.Module):
     mask = outp>=self.args.ntoks
     if mask.sum()>0:
       idxs = (outp-self.args.ntoks)
-      print("idxs")
-      print(idxs)
       idxs = idxs[mask]
-      print('filtered indexes')
-      print(idxs)
       verts = vertex.index_select(0,idxs)
-      print("vertx")
-      print(verts)
-      print(outp.shape)
-      print(mask)
-      print(outp)
       outp.masked_scatter_(mask,verts)
     return outp
 
