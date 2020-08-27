@@ -544,11 +544,7 @@ class DocumentDataset():
         # TODO, ents
         ents = ents[0]
         vocab = self.out.vocab
-        print("ents")
-        print(ents)
-        print(x)
-        print("vocab size")
-        print(len(vocab.itos))
+
         s = ' '.join(
             [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
 
