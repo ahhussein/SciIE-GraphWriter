@@ -6,19 +6,18 @@ from models.lstm import LSTMContextualize
 import data_utils
 from models.span_embeddings import SpanEmbeddings
 
-class SpanEmbeddingsWrapper(nn.Module):
-    def __init__(self, config, data, generate_candidates=True):
+class VertexEmbeddings(nn.Module):
+    def __init__(self, config, data):
         super().__init__()
         self.embeddings = Embeddings(config, data)
         self.lstm = LSTMContextualize(config, data)
-        self.span_embeddings = SpanEmbeddings(config, data, not generate_candidates)
-        self.generate_candidates = generate_candidates
+        self.span_embeddings = SpanEmbeddings(config, data)
         self.config = config
         self.emb_projection = nn.Linear(1270, 500)
         torch.nn.init.xavier_uniform_(self.emb_projection.weight)
+        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
 
-
-    def forward(self, batch):
+    def forward(self, batch, generate_candiadtes=True):
         # max sentence length in terms of number of words
         max_sentence_length = batch.char_idx.shape[1]
 
@@ -31,7 +30,7 @@ class SpanEmbeddingsWrapper(nn.Module):
 
         # [num_sentences, max_sentence_length]
         # Get gold entities
-        if not self.generate_candidates:
+        if not generate_candiadtes:
             candidate_starts = batch.ner_starts
             candidate_ends = batch.ner_ends
             candidate_mask = util.sequence_mask(batch.ner_len, batch.ner_starts.shape[1])
@@ -81,7 +80,7 @@ class SpanEmbeddingsWrapper(nn.Module):
             flat_candidate_starts,
             flat_candidate_ends
         )
-
+        # TODO check projection
         # Project entity embs to lower space
         candidate_span_emb = self.emb_projection(candidate_span_emb)
 

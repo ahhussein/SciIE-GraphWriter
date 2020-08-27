@@ -11,6 +11,8 @@ from optimizers import MultipleOptimizer
 from torch.utils.tensorboard import SummaryWriter
 import subprocess
 import logging
+from models.vertex_embeddings import VertexEmbeddings
+
 logger = logging.getLogger('myapp')
 hdlr = logging.FileHandler('train.log')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -51,17 +53,22 @@ def main(args):
     writer = SummaryWriter(log_dir=config['log_dir'])
 
     dataset_wrapper = DocumentDataset(config)
+    vertex_embeddings = VertexEmbeddings(config, dataset_wrapper)
 
     # Graph writer arguments
     args = dynArgs(args)
 
     if config['train_graph_for'] or config['train_both_for']:
-        graph_model = graph(args, dataset_wrapper.config, dataset_wrapper)
+        graph_model = graph(args, config, dataset_wrapper, vertex_embeddings, logger)
+        # Move models to gpu?
+        graph_model = graph_model.to(args.device)
+
     else:
         graph_model = None
 
     if config['train_sci_for'] or config['train_both_for']:
-        model = Model(config, dataset_wrapper)
+        model = Model(config, dataset_wrapper, vertex_embeddings, logger)
+        model = model.to(args.device)
     else:
         model = None
 
@@ -98,8 +105,8 @@ def main(args):
     else:
         graph_opt = None
 
-    logger.info(f"Training Graph for: {config['train_graph_for']} epochs")
     logger.info(f"Training SCIERC for: {config['train_sci_for']} epochs")
+    logger.info(f"Training Graph for: {config['train_graph_for']} epochs")
     logger.info(f"Training Jointly for: {config['train_both_for']} epochs")
     logger.info(f"Batch size: {config.batch_size}")
 
@@ -110,23 +117,62 @@ def main(args):
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=sci_opt, gamma=config["decay_rate"])
 
     offset = 0
-    for epoch in range(max(config['train_graph_for'], config['train_sci_for']) + config['train_both_for']):
-        torch.autograd.set_detect_anomaly(True)
 
-        if config['train_sci_for'] and config['train_sci_for'] > epoch:
-            train_sci = True
-        else:
-            train_sci = False
+    torch.autograd.set_detect_anomaly(True)
 
-        if config['train_graph_for'] and config['train_graph_for'] > epoch:
-            train_graph = True
-        else:
-            train_graph = False
+    # Train the sci erc
+    for epoch in range(config['train_sci_for']):
+        predict_dict, loss, sci_loss, gr_loss, offset = train(
+            model,
+            graph_model,
+            dataset_wrapper,
+            optimizer,
+            writer,
+            data_iter,
+            args.device,
+            config,
+            offset,
+            False,
+            True,
+            False
+        )
 
-        if not train_graph and not train_sci:
-            train_joint = True
-        else:
-            train_joint = False
+        val_loss, val_sci_loss, val_gr_loss = evaluate(
+            model,
+            graph_model,
+            dataset_wrapper,
+            val_iter,
+            args.device,
+            config,
+            False,
+            True,
+            False
+        )
+
+        logger.info(f"epoch Sci: {epoch + 1} - loss: {sci_loss}")
+        logger.info(f"epoch Sci: {epoch + 1} - VAL loss: {val_sci_loss}")
+
+        logger.info("Saving models")
+
+        if epoch % 5 == 0:
+            torch.save(
+                model.state_dict(),
+                f"{config['log_dir']}/model__{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
+            )
+
+            torch.save(
+                vertex_embeddings.state_dict(),
+                f"{config['log_dir']}/vertex_embeddings__{epoch + 1}"
+            )
+
+        writer.add_scalar('train/sci_loss', sci_loss, epoch)
+        writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
+
+        scheduler.step()
+
+    # Train the graph erc
+    offset = 0
+    for epoch in range(config['train_graph_for']):
 
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
@@ -138,9 +184,9 @@ def main(args):
             args.device,
             config,
             offset,
-            train_graph or train_joint,
-            train_sci or train_joint,
-            train_joint
+            True,
+            False,
+            False
         )
 
         val_loss, val_sci_loss, val_gr_loss = evaluate(
@@ -150,35 +196,106 @@ def main(args):
             val_iter,
             args.device,
             config,
-            train_graph or train_joint,
-            train_sci or train_joint,
-            train_joint
+            True,
+            False,
+            False
         )
 
         if args.lrwarm and graph_opt:
             update_lr(graph_opt, args, epoch)
 
-        logger.info(f"epoch: {epoch + 1} - loss: {loss}")
-        logger.info(f"epoch: {epoch + 1} - VAL loss: {val_loss}")
+        logger.info(f"epoch graph: {epoch + 1} - loss: {gr_loss}")
+        logger.info(f"epoch graph: {epoch + 1} - VAL loss: {val_gr_loss}")
 
         logger.info("Saving models")
 
-        if train_sci:
-            torch.save(
-                model.state_dict(),
-                f"{config['log_dir']}/model__{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
-            )
-
-        if train_graph:
+        if epoch % 5 == 0:
             torch.save(
                 graph_model.state_dict(),
                 f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
             )
 
+            torch.save(
+                vertex_embeddings.state_dict(),
+                f"{config['log_dir']}/vertex_embeddings_graph_{epoch + 1}"
+            )
+
+        writer.add_scalar('train/gr_loss', gr_loss, epoch)
+        writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
+
+    offset = 0
+    # joint training
+    data_iter = data.Iterator(
+        dataset_wrapper.dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=True
+    )
+
+    val_iter = data.Iterator(
+        dataset_wrapper.val_dataset,
+        config.batch_size_joint,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
+    for epoch in range(config['train_both_for']):
+        predict_dict, loss, sci_loss, gr_loss, offset = train(
+            model,
+            graph_model,
+            dataset_wrapper,
+            optimizer,
+            writer,
+            data_iter,
+            args.device,
+            config,
+            offset,
+            False,
+            False,
+            True
+        )
+
+        val_loss, val_sci_loss, val_gr_loss = evaluate(
+            model,
+            graph_model,
+            dataset_wrapper,
+            val_iter,
+            args.device,
+            config,
+            False,
+            False,
+            True
+        )
+
+        if args.lrwarm and graph_opt:
+            update_lr(graph_opt, args, epoch)
+
+        logger.info(f"epoch joint: {epoch + 1} - loss: {loss}")
+        logger.info(f"epoch joint: {epoch + 1} - VAL loss: {val_loss}")
+
+        logger.info("Saving models")
+
+        torch.save(
+            model.state_dict(),
+            f"{config['log_dir']}/model__joint_{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
+        )
+
+        torch.save(
+            graph_model.state_dict(),
+            f"{config['log_dir']}/graph_model__joint_{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
+        )
+
+        torch.save(
+            vertex_embeddings.state_dict(),
+            f"{config['log_dir']}/vertex_embeddings__joint_{epoch + 1}"
+        )
+
         writer.add_scalar('train/loss', loss, epoch)
         writer.add_scalar('train/gr_loss', gr_loss, epoch)
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
-        writer.add_scalar('train/loss', loss, epoch)
         writer.add_scalar('val/loss', val_loss, epoch)
         writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
         writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
@@ -201,18 +318,21 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             model.set_train_disjoint(False)
             graph_model.set_train_disjoint(False)
 
-        if train_sci:
+        if train_sci or train_joint:
             try:
-                predict_dict, sci_loss = model(batch)
                 logger.info(f"SCI Batch: {count}")
+                predict_dict, sci_loss = model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
                     logger.error('| WARNING: ran out of memory, skipping sci batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
                     for p in model.parameters():
                         if p.grad is not None:
                             del p.grad  # free some memory
                     torch.cuda.empty_cache()
+                else:
+                    raise e
 
                 # skip batch
                 continue
@@ -220,22 +340,25 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             sci_loss = torch.tensor(0)
             predict_dict = None
 
-        if train_graph:
+        if train_graph or train_joint:
             try:
+                logger.info(f"Graph Batch: {count}")
                 p, planlogits = graph_model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
                     logger.error('| WARNING: ran out of memory, skipping graph batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
+                    logger.info(f"Batch key: {batch.doc_key}")
+
                     for p in model.parameters():
                         if p.grad is not None:
                             del p.grad  # free some memory
                     torch.cuda.empty_cache()
-
+                else:
+                    raise e
                 # skip batch
                 continue
 
-            logger.info(f"Graph Batch: {count}")
             p = p[:, :-1, :].contiguous()
 
             tgt = batch.tgt[:, 1:].contiguous().view(-1).to(args.device)
@@ -258,10 +381,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
 
         step_list = []
-        if train_graph:
+        if train_graph or train_joint:
             step_list.append('graph')
 
-        if train_sci:
+        if train_sci or train_joint:
             step_list.append('sci')
 
         optimizer.step(step_list)
@@ -283,9 +406,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         # torch.nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
         # optimizer.step()
 
-        if train_sci:
+        if train_sci or train_joint:
             nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
-        if train_graph:
+        if train_graph or train_joint:
             nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
 
         optimizer.zero_grad()
@@ -313,13 +436,13 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
                 model.set_train_disjoint(False)
                 graph_model.set_train_disjoint(False)
 
-            if train_sci:
+            if train_sci or train_joint:
                 predict_dict, sci_loss = model(batch)
             else:
                 sci_loss = torch.tensor(0)
                 predict_dict = None
 
-            if train_graph:
+            if train_graph or train_joint:
                 p, planlogits = graph_model(batch)
 
                 p = p[:, :-1, :].contiguous()
@@ -332,7 +455,12 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
             else:
                 gr_loss = torch.tensor(0)
 
-            total_loss = config['graph_writer_weight'] * gr_loss.item() + config['scierc_weight'] * sci_loss.item()
+            if train_sci:
+                total_loss = sci_loss.item()
+            elif train_graph:
+                total_loss = gr_loss.item()
+            else:
+                total_loss = config['graph_writer_weight'] * gr_loss.item() + config['scierc_weight'] * sci_loss.item()
 
             l += total_loss * len(batch.doc_len)
 

@@ -11,13 +11,13 @@ import json
 from encoder import MyEncoder
 
 class Evaluator:
-    def __init__(self, config, dataset, model):
+    def __init__(self, config, dataset, model, logger = None):
         self.config = config
         self.dataset = dataset
         self.eval_data = self.dataset.eval_data
         self.coref_eval_data = self.dataset.coref_eval_data
         self.model = model
-        self.debug_printer = debug_utils.DebugPrinter()
+        #self.debug_printer = debug_utils.DebugPrinter()
         self.start_time = time.time()
         self.ner_predictions = []
         self.rel_predictions = []
@@ -27,6 +27,7 @@ class Evaluator:
         self.coref_evaluator = coref_metrics.CorefEvaluator()
         self.total_loss = 0
         self.json_data = []
+        self.logger = logger
 
 
     def evaluate(self, batch):
@@ -40,10 +41,14 @@ class Evaluator:
 
         sentences = doc_example["sentences"]
 
+
+        self.log("info", "Decoding")
         decoded_predictions = inference_utils.mtl_decode(
             sentences, predict_dict, self.dataset.ner_labels_inv,
             self.dataset.rel_labels_inv, self.config
         )
+        self.log("info", "Decoding - Completed")
+
 
         # Relation extraction.
         if "rel" in decoded_predictions:
@@ -93,6 +98,9 @@ class Evaluator:
 
         self.total_loss += predict_dict["loss"]
 
+        self.log("info", "Finish evaluation")
+
+
         self.json_data.append(json_output)
 
     def summarize_results(self):
@@ -108,7 +116,8 @@ class Evaluator:
             else:
                 return "{}%".format(k)
 
-        self.debug_printer.close()
+
+        #self.debug_printer.close()
         summary_dict = {}
         task_to_f1 = {}  # From task name to F1.
         elapsed_time = time.time() - self.start_time
@@ -193,6 +202,11 @@ class Evaluator:
             for json_line in self.json_data:
                 f.write(json.dumps(json_line, cls=MyEncoder))
                 f.write('\n')
+
+    def log(self, level, message):
+        if self.logger:
+            getattr(self.logger, level)(message)
+
 
 
 

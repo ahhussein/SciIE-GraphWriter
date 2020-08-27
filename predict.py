@@ -5,10 +5,22 @@ from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
-from eval_iter import EvalIterator
+from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
+import logging
+from models.vertex_embeddings import VertexEmbeddings
+from torch import nn
+
 
 torch.manual_seed(0)
+
+logger = logging.getLogger('myapp')
+hdlr = logging.FileHandler('predict.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.DEBUG)
+
 
 
 def main():
@@ -29,16 +41,25 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
+    vertex_model_name = 'vertex_embeddings__1'
+
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    model = Model(config, dataset)
+    vertex_embeddings = VertexEmbeddings(config, dataset)
 
-    evaluator = Evaluator(config, dataset, model)
+    model = Model(config, dataset, vertex_embeddings, logger)
+
+    #model.to(args.device)
+
+    evaluator = Evaluator(config, dataset, model, logger)
 
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__7.loss-0.0.lr-0.000497007490007497"))
+    model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
+
+    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
+    vertex_embeddings.load_state_dict(vertex_cpt)
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(
@@ -54,6 +75,8 @@ def main():
         with torch.no_grad():
 
             doc_batch = dataset.fix_batch(batch)
+            logger.info(f"Batch size: {doc_batch.text_len}")
+            logger.info(f"Batch key: {doc_batch.doc_key}")
             evaluator.evaluate(doc_batch)
 
             print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))

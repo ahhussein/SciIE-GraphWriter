@@ -5,11 +5,10 @@ from GraphWriter.models.list_encoder import list_encode, lseq_encode
 from GraphWriter.models.last_graph import graph_encode
 from GraphWriter.models.beam import Beam
 from GraphWriter.models.splan import splanner
-from models.span_embeddings_wrapper import SpanEmbeddingsWrapper
 
 
 class model(nn.Module):
-  def __init__(self,args, config, data):
+  def __init__(self,args, config, data, vertex_embeddings, logger=None):
     super().__init__()
     self.args = args
     self.args.ntoks = config.ntoks
@@ -17,8 +16,7 @@ class model(nn.Module):
 
     self.emb = nn.Embedding(config.ntoks,args.hsz)
     self.lstm = nn.LSTMCell(args.hsz*cattimes,args.hsz)
-    # TODO
-    self.span_encoder = SpanEmbeddingsWrapper(config, data, generate_candidates=False)
+    self.vertex_embeddings = vertex_embeddings
     self.train_disjoint = True
     self.out = nn.Linear(
       args.hsz*cattimes,
@@ -28,7 +26,7 @@ class model(nn.Module):
 
     torch.nn.init.xavier_uniform_(self.out.weight)
 
-    self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
+    self.rel_embs = vertex_embeddings.rel_embs
 
     #self.le = list_encode(args)
     #self.entout = nn.Linear(args.hsz,1)
@@ -63,17 +61,17 @@ class model(nn.Module):
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
 
     if self.train_disjoint:
-      ent_embs = self.span_encoder(b)[4]
+      ent_embs = self.vertex_embeddings(b, False)[4]
       entlens = []
       offset = 0
       for count, nlen in enumerate(b.doc_len):
         entlens.append(sum(b.ner_len[offset:offset + nlen]))
         offset += nlen
 
-      ents = self.span_encoder.pad_entities(ent_embs, entlens)
+      ents = self.vertex_embeddings.pad_entities(ent_embs, entlens)
       entlens = torch.tensor(entlens)
-      rel_lengths = [len(item) for item in b.rels]
-      rel_indices = [item for sublist in b.rels for item in sublist]
+      rel_lengths = [len(item) for item in b.relsraw]
+      rel_indices = [item for sublist in b.relsraw for item in sublist]
       b.rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
     else:
       ents = b.top_spans
@@ -158,6 +156,7 @@ class model(nn.Module):
     z = (1-s)*z
     o = torch.cat((o,z),2)
     o = o+(1e-6*torch.ones_like(o))
+    o = o.clamp(min=1e-4)
     return o.log(),planlogits
 
   def maskFromList(self,size,l):
@@ -183,17 +182,17 @@ class model(nn.Module):
       tencs,_ = self.tenc(b.src)
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
 
-    ent_embs = self.span_encoder(b)[4]
+    ent_embs = self.vertex_embeddings(b, False)[4]
     entlens = []
     offset = 0
     for count, nlen in enumerate(b.doc_len):
       entlens.append(sum(b.ner_len[offset:offset + nlen]))
       offset += nlen
 
-    ents = self.span_encoder.pad_entities(ent_embs, entlens)
+    ents = self.vertex_embeddings.pad_entities(ent_embs, entlens)
     entlens = torch.tensor(entlens)
-    rel_lengths = [len(item) for item in b.rels]
-    rel_indices = [item for sublist in b.rels for item in sublist]
+    rel_lengths = [len(item) for item in b.relsraw]
+    rel_indices = [item for sublist in b.relsraw for item in sublist]
     b.rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
 
     if self.graph:

@@ -9,21 +9,22 @@ import util
 import span_prune_cpp
 import numpy as np
 
-
 class Model(nn.Module):
-    def __init__(self, config, data, vertex_embeddings, logger=None):
+    def __init__(self, config, data, span_wrapper, rel_embs, logger=None):
         super().__init__()
         self.config = config
         self.data = data
         self.embeddings = Embeddings(config, data)
         self.lstm = LSTMContextualize(config, data)
-        self.vertex_embeddings = vertex_embeddings
+        self.span_embeddings_wrapper = span_wrapper
         self.unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
         self.rel_scores = RelScores(config, len(self.data.rel_labels))
         self.ner_scores = NerScores(config, len(self.data.ner_labels))
         self.train_disjoint=True
-        self.rel_embs = vertex_embeddings.rel_embs
+        self.rel_embs = rel_embs
+
+        self.emb_projection = nn.Linear(1270, 500)
 
         self.logger = logger
 
@@ -47,7 +48,7 @@ class Model(nn.Module):
             flat_context_emb,
             flat_head_emb,
             batch_word_offset
-        ) = self.vertex_embeddings(batch, True)
+        ) = self.span_embeddings_wrapper(batch, True)
 
         doc_len = flat_context_emb.shape[0]
 
@@ -90,19 +91,9 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             self.log('info', "topk - relations -- Started")
-            # Crossing is allowed which means it can return overlapping spans
-
-            assert not torch.isnan(candidate_entity_scores).any()
-            candidate_entity_scores[candidate_entity_scores == float('-inf')] = -1e9
-
-            self.log('info', f'min candidate entity score: {torch.min(candidate_entity_scores)}')
-            self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
-
-
-            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
-                batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
+                batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False
             )
             self.log('info', "topk - relations -- Completed")
 
@@ -149,12 +140,7 @@ class Model(nn.Module):
 
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
-            # Crossing is not allowed which means it will always returns spans that doesn't overlap with each other
             self.log('info', "topk -- mentions -- Started")
-            assert not torch.isnan(candidate_mention_scores).any()
-            self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
-            self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
-            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             top_mention_indices = span_prune_cpp.extract_spans(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
@@ -165,7 +151,6 @@ class Model(nn.Module):
                 True
             )  # [1, topk]
             self.log('info', "topk -- mentions -- Completed")
-
 
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
 
@@ -266,36 +251,35 @@ class Model(nn.Module):
             masked_flattened_scores = flattened_scores[rel_loss_mask.view(-1)].view(-1)
 
             # Build graphs per document
-            if not self.train_disjoint:
-                batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
-                                                                          masked_flattened_scores, num_doc_entities,
-                                                                          mention_idx, antecedent_scores, antecedent_mask)
+            batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
+                                                                      masked_flattened_scores, num_doc_entities,
+                                                                      mention_idx, antecedent_scores, antecedent_mask)
 
-                rel_indices = []
-                for idx, sent_entities in enumerate(num_entities):
-                    for entity1_idx in range(sent_entities):
-                        for entity2_idx in range(sent_entities):
-                            if entity1_idx < entity2_idx:
-                                rel_indices.extend(range(len(self.data.rel_labels)))
-                                continue
+            rel_indices = []
+            for idx, sent_entities in enumerate(num_entities):
+                for entity1_idx in range(sent_entities):
+                    for entity2_idx in range(sent_entities):
+                        if entity1_idx < entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
 
-                            if entity1_idx == entity2_idx:
-                                rel_indices.extend(range(len(self.data.rel_labels)))
-                                continue
+                        if entity1_idx == entity2_idx:
+                            rel_indices.extend(range(len(self.data.rel_labels)))
+                            continue
 
-                            rel_indices.extend(range(
-                                len(self.data.rel_labels_extended),
-                                len(self.data.rel_labels_extended) + len(self.data.rel_labels),
-                            ))
-                rel_indices = torch.tensor(rel_indices)
+                        rel_indices.extend(range(
+                            len(self.data.rel_labels_extended),
+                            len(self.data.rel_labels_extended) + len(self.data.rel_labels),
+                        ))
+            rel_indices = torch.tensor(rel_indices)
 
-                batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
-                    top_spans,
-                    num_doc_entities,
-                    rel_indices,
-                    rel_lengths,
-                    coref_lengths
-                )
+            batch.top_spans, batch.rels, batch.doc_num_entities = self.prepare_adj_embs(
+                top_spans,
+                num_doc_entities,
+                rel_indices,
+                rel_lengths,
+                coref_lengths
+            )
 
             predict_dict.update({
                 # flat candidate scores in the original shape # [num_sentences, max_num_candidates]
@@ -378,6 +362,8 @@ class Model(nn.Module):
                 flat_candidate_starts,
                 flat_candidate_ends
             )
+
+        self.log('info', 'model batch completed')
 
         return predict_dict, loss
 
@@ -516,7 +502,7 @@ class Model(nn.Module):
         return adj, rel_lengths, coref_lengths
 
     def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths):
-        out = self.vertex_embeddings.pad_entities(top_spans, ent_len)
+        out = self.span_embeddings_wrapper.pad_entities(top_spans, ent_len)
 
         # list of all relations embs
         rels = self.rel_embs.weight[rel_indices].split(rel_lengths)

@@ -3,7 +3,7 @@ import torch
 import util
 
 class SpanEmbeddings(nn.Module):
-    def __init__(self, config, data, read_gt = False):
+    def __init__(self, config, data):
         super().__init__()
         self.config = config
         self.data = data
@@ -11,10 +11,7 @@ class SpanEmbeddings(nn.Module):
         # Embeddings for span widths
         self.max_width = self.config['max_arg_width']
 
-        if read_gt:
-            self.max_width = self.config['max_arg_width']+5
-        else:
-            self.max_width = self.config['max_arg_width']
+        self.max_width = self.config['max_arg_width']+5
 
         emb = torch.empty(self.max_width, self.config['feature_size'])
 
