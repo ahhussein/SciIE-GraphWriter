@@ -173,7 +173,11 @@ class model(nn.Module):
     if mask.sum()>0:
       idxs = (outp-self.ntoks)
       idxs = idxs[mask]
+      # TODO for test reasons, remove later
+      idxs = idxs.clamp(max=len(vertex)-1)
+
       verts = vertex.index_select(0,idxs)
+
       outp.masked_scatter_(mask,verts)
     return outp
 
@@ -181,7 +185,6 @@ class model(nn.Module):
     if self.args.title:
       tencs,_ = self.tenc(b.src)
       tmask = self.maskFromList(tencs.size(),b.src[1]).unsqueeze(1)
-
     ent_embs = self.vertex_embeddings(b, False)[4]
     entlens = []
     offset = 0
@@ -256,7 +259,6 @@ class model(nn.Module):
       s = torch.sigmoid(self.switch(l))
       o = self.out(l)
       o = torch.softmax(o,2)
-
       o = s*o
       #compute copy attn
       _, z = self.mattn(l,(ents,entlens))
@@ -273,7 +275,6 @@ class model(nn.Module):
           for r in q:
             o[p,:,r].fill_(0)
       '''
-
       o = o+(1e-6*torch.ones_like(o))
       decoded = o.log()
       scores, words = decoded.topk(dim=2,k=k)

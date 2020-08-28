@@ -544,9 +544,8 @@ class DocumentDataset():
         # TODO, ents
         ents = ents[0]
         vocab = self.out.vocab
-
-        s = ' '.join(
-            [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
+        # TODO remove
+        s = ' '.join([vocab.itos[y] if y<len(vocab.itos) else ents[y-len(vocab.itos)].upper() if (y-len(vocab.itos)) < len(ents) else '<unk>' for j,y in enumerate(x)])
 
         #s = ' '.join(
         #    [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
