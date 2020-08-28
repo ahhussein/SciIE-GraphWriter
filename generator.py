@@ -38,7 +38,9 @@ def test(args,ds, graph_model,epoch='cmdline'):
     train=False
   )
   ofn = "outputs/"+model+".inputs.beam_predictions."+epoch
+  ofngt = "outputs/"+model+".inputs.beam_gt."+epoch
   pf = open(ofn,'w')
+  pfgt = open(ofngt,'w')
   preds = []
   golds = []
 
@@ -65,6 +67,7 @@ def test(args,ds, graph_model,epoch='cmdline'):
       golds.append(gold.lower())
       #tf.write(ent+'\n')
       pf.write(gen.lower()+'\n')
+      pfgt.write(gold.lower()+'\n')
 
   #sci_model.train()
   graph_model.train()
