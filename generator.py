@@ -60,7 +60,7 @@ def test(args,ds, graph_model,epoch='cmdline'):
       gen.sort()
       gen = ds.reverse(gen.done[0].words,b.rawent)
       k+=1
-      gold = ds.reverse(b.out[0][0][1:],b.rawent)
+      gold = ds.reverse(b.tgt[0][1:],b.rawent)
       print(gold)
       print(gen)
       print()
