@@ -156,8 +156,8 @@ torch::Tensor extract_spans(
                 });
 
         cout << ctime(&givemetime) <<" Fauly Loop - Sort Spans - Completed" << endl;
-        cout << ctime(&givemetime) <<" num out spans size" << num_output_spans.size(0)<< endl;
-        cout << ctime(&givemetime) <<" topspan indices length" << top_span_indices.size()<< endl;
+        cout << ctime(&givemetime) <<" num out spans size " << num_output_spans[l].size(0)<< endl;
+        cout << ctime(&givemetime) <<" topspan indices length " << top_span_indices.size()<< endl;
         for (int i = 0; i < num_output_spans[l].item<int64_t>(); ++i) {
 
           //TODO
