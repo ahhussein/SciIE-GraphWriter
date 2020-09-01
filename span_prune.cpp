@@ -107,6 +107,7 @@ torch::Tensor extract_spans(
         }
         if (!any_crossing) {
           if (_sort_spans) {
+            // TODO
             top_span_indices.push_back(i);
           } else {
             output_span_indices[l][num_selected_spans] = i;
@@ -155,9 +156,11 @@ torch::Tensor extract_spans(
                 });
 
         cout << ctime(&givemetime) <<" Fauly Loop - Sort Spans - Completed" << endl;
-
-
+        cout << ctime(&givemetime) <<" num out spans size" << num_output_spans.size(0)<< endl;
+        cout << ctime(&givemetime) <<" topspan indices length" << top_span_indices.size()<< endl;
         for (int i = 0; i < num_output_spans[l].item<int64_t>(); ++i) {
+
+          //TODO
           output_span_indices[l][i] = top_span_indices[i];
         }
       }
