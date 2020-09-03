@@ -41,7 +41,7 @@ def main():
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
-    vertex_model_name = 'vertex_embeddings__1'
+    vertex_model_name = 'vertex_embeddings__31'
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
@@ -49,7 +49,7 @@ def main():
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    #model.to(args.device)
+    model.to(args.device)
 
     evaluator = Evaluator(config, dataset, model, logger)
 
