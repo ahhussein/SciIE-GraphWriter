@@ -67,6 +67,7 @@ class VertexEmbeddings(nn.Module):
 
         # [num_words, emb], padding removed
         flat_context_emb = util.flatten_emb_by_sentence(context_outputs, text_len_mask)
+        print()
 
         # [num_words, emb]
         flat_head_emb = util.flatten_emb_by_sentence(head_emb, text_len_mask)
