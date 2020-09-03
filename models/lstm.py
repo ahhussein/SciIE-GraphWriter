@@ -28,7 +28,7 @@ class LSTMContextualize(nn.Module):
     def forward(self, context_emb):
         current_inputs = context_emb
         for i, lstm in enumerate(self.lstms):
-            e, (h, c) = self.lstm(current_inputs)
+            e, (h, c) = lstm(current_inputs)
             e = self.dropout(e)
 
 
