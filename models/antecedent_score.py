@@ -11,7 +11,7 @@ class AntecedentScore(nn.Module):
         )
 
         self.input = nn.Linear(
-            1520,#3830, #TODO
+            3830, #TODO
             self.config["ffnn_size"]
         )
 
