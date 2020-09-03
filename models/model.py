@@ -16,7 +16,6 @@ class Model(nn.Module):
         self.config = config
         self.data = data
         self.embeddings = Embeddings(config, data)
-        self.lstm = LSTMContextualize(config, data)
         self.vertex_embeddings = vertex_embeddings
         self.unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
