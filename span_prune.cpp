@@ -46,7 +46,7 @@ torch::Tensor extract_spans(
 
     torch::Tensor output_span_indices = torch::ones({num_sentences, max_num_output_spans});
 
-   time_t givemetime = time(NULL);
+    givemetime = time(NULL);
 
       cout << ctime(&givemetime) <<" Sorting span indices: Started" << endl;
 
