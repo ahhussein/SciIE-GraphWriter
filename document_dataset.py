@@ -119,7 +119,7 @@ class DocumentDataset():
             self.val_dataset = data.Dataset(self.eval_examples, self.fields)
 
         if is_eval:
-            self.lm_file = h5py.File(config["lm_path_test"], "r")
+            self.lm_file = h5py.File(config["lm_path_dev"], "r")
             self._load_test_data()
             self.test_dataset = data.Dataset(self.eval_examples, self.fields)
 
@@ -222,7 +222,7 @@ class DocumentDataset():
         coref_eval_data = {}
 
 
-        with open(self.config["test_path"]) as f:
+        with open(self.config["eval_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
 
         self.populate_sentence_offset(eval_examples)
