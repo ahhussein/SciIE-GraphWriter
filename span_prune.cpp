@@ -57,7 +57,7 @@ torch::Tensor extract_spans(
                  if (j1 >= span_scores.size(1) || j1 < 0 || j2 >= span_scores.size(1) || j2 < 0) {
                     return false;
                  }
-
+                   //TODO
                   return span_scores[i][j2].item<int64_t>() < span_scores[i][j1].item<int64_t>();
                 });
     }

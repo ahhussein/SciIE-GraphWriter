@@ -6,7 +6,6 @@ from models.span_embeddings import UnaryScores, RelScores, NerScores
 from models.antecedent_score import AntecedentScore
 import data_utils
 import util
-import span_prune_cpp
 import numpy as np
 
 
@@ -101,7 +100,8 @@ class Model(nn.Module):
             self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
-                batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False
+                batch.text_len, max_sentence_length, sort_spans=True, enforce_non_crossing=False,
+                logger=self.logger
             )
             self.log('info', "topk - relations -- Completed")
 
@@ -154,14 +154,15 @@ class Model(nn.Module):
             self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
             self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
             self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
-            top_mention_indices = span_prune_cpp.extract_spans(
+            top_mention_indices = util.span_prune(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
                 flat_candidate_ends.unsqueeze(0),
                 k.unsqueeze(0),
                 doc_len,
                 True,
-                True
+                True,
+                self.logger
             )  # [1, topk]
             self.log('info', "topk -- mentions -- Completed")
 
