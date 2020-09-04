@@ -50,6 +50,9 @@ def main(args):
     config.device = args.device
 
     vertex_embeddings = VertexEmbeddings(config, dataset)
+    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
+    vertex_embeddings.load_state_dict(vertex_cpt)
+
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
@@ -61,10 +64,6 @@ def main(args):
 
     model.load_state_dict(torch.load(f"{log_dir}/model__5.loss-0.0.lr-0.0004980029980005"))
 
-
-
-    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
-    vertex_embeddings.load_state_dict(vertex_cpt)
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(
