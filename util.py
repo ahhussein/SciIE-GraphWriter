@@ -60,7 +60,7 @@ def span_prune(
     output_span_indices = torch.ones(num_sentences, max_num_output_spans)
 
     if logger:
-        logger.info(f"Sorting scores shape - {span_score.shape} -- Started")
+        logger.info(f"Sorting scores shape - {span_scores.shape} -- Started")
 
     # Sort spans by score
     sorted_scores, sorted_input_span_indices = torch.sort(span_scores, descending=True)
