@@ -123,15 +123,15 @@ def span_prune(
                     end = candidate_ends[l][i]
 
                     latest_end_iter = None
-                    if j in start_to_latest_end:
-                        latest_end_iter = start_to_latest_end[j]
+                    if start in start_to_latest_end:
+                        latest_end_iter = start_to_latest_end[start]
 
                     if not latest_end_iter or end > latest_end_iter:
                         start_to_latest_end[start] = end
 
                     earliest_start_iter = None
-                    if j in end_to_earliest_start:
-                        earliest_start_iter = end_to_earliest_start[j]
+                    if end in end_to_earliest_start:
+                        earliest_start_iter = end_to_earliest_start[end]
 
                     if not earliest_start_iter or start < earliest_start_iter:
                         end_to_earliest_start[end] = start
