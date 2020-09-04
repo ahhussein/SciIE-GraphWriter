@@ -41,7 +41,7 @@ def main(args):
     config["batch_size"] = -1
     config["max_tokens_per_batch"] = -1
 
-    vertex_model_name = 'vertex_embeddings__1'
+    vertex_model_name = 'vertex_embeddings__31'
 
     args = dynArgs(args)
 
@@ -53,7 +53,7 @@ def main(args):
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    #model.to(args.device)
+    model.to(args.device)
 
     evaluator = Evaluator(config, dataset, model, logger)
 

@@ -15,7 +15,7 @@ class VertexEmbeddings(nn.Module):
         self.config = config
         self.emb_projection = nn.Linear(1270, 500)
         torch.nn.init.xavier_uniform_(self.emb_projection.weight)
-        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
+        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 1270)
 
     def forward(self, batch, generate_candiadtes=True):
         # max sentence length in terms of number of words
@@ -67,6 +67,7 @@ class VertexEmbeddings(nn.Module):
 
         # [num_words, emb], padding removed
         flat_context_emb = util.flatten_emb_by_sentence(context_outputs, text_len_mask)
+        print()
 
         # [num_words, emb]
         flat_head_emb = util.flatten_emb_by_sentence(head_emb, text_len_mask)
@@ -80,9 +81,9 @@ class VertexEmbeddings(nn.Module):
             flat_candidate_starts,
             flat_candidate_ends
         )
-        # TODO check projection
+        # TODO check projection important for graph to work
         # Project entity embs to lower space
-        candidate_span_emb = self.emb_projection(candidate_span_emb)
+        # candidate_span_emb = self.emb_projection(candidate_span_emb)
 
         return (
             candidate_starts,

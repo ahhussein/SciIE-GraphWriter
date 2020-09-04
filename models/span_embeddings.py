@@ -21,7 +21,7 @@ class SpanEmbeddings(nn.Module):
         self.softmax = nn.Softmax(1)
         self.dropout = nn.Dropout(1- self.config['dropout_rate'])
         self.ffnn = nn.Linear(
-            config['contextualization_size'] * config['contextualization_layers'] * 2,
+            config['contextualization_size'] * 2,
             self.config['num_attention_heads']
         )
         torch.nn.init.xavier_uniform_(self.ffnn.weight)
@@ -103,7 +103,7 @@ class UnaryScores(nn.Module):
         super().__init__()
         self.config = config
         self.input = nn.Linear(
-            500, #TODO
+            1270, #TODO
             self.config["ffnn_size"]
         )
 
@@ -151,7 +151,7 @@ class RelScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            500 * 3, #TODO
+            1270 * 3, #TODO
             self.config["ffnn_size"]
         )
 
@@ -239,7 +239,7 @@ class NerScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            500, #TODO
+            1270, #TODO
             self.config["ffnn_size"]
         )
 
