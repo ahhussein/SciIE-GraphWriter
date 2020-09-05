@@ -240,8 +240,8 @@ class DocumentDataset():
             num_sentences += len(doc_examples[-1])
             doc_count += 1
 
-            eval_data[doc_id] = data_utils.split_example_for_eval(document)
-            coref_eval_data[doc_id] = document
+            eval_data[example['doc_key']] = data_utils.split_example_for_eval(document)
+            coref_eval_data[example['doc_key']] = document
 
         print("Loaded {} eval examples.".format(doc_count))
 
