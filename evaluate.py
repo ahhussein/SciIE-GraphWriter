@@ -6,7 +6,6 @@ from torchtext import data
 from document_dataset import EvalDataset
 from models.model import Model
 import torch
-import span_prune_cpp
 #from evaluator import Evaluator
 from eval_iter import EvalIterator
 

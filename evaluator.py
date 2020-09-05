@@ -11,16 +11,17 @@ import json
 from encoder import MyEncoder
 
 class Evaluator:
-    def __init__(self, config, dataset, model, logger = None):
+    def __init__(self, config, dataset, logger = None):
         self.config = config
         self.dataset = dataset
         self.eval_data = self.dataset.eval_data
         self.coref_eval_data = self.dataset.coref_eval_data
-        self.model = model
         #self.debug_printer = debug_utils.DebugPrinter()
         self.start_time = time.time()
         self.ner_predictions = []
+        self.gold_ner = []
         self.rel_predictions = []
+        self.gold_rels = []
         self.coref_predictions = {}
         self.mention_evaluators = {k: data_utils.RetrievalEvaluator() for k in [-3, -2, -1, 10, 20, 30, 40, 50]}
         self.entity_evaluators = {k: data_utils.RetrievalEvaluator() for k in [-3, -2, -1, 10, 20, 30, 40, 50, 70]}
@@ -30,78 +31,73 @@ class Evaluator:
         self.logger = logger
 
 
-    def evaluate(self, batch):
-        predict_dict, loss = self.model(batch)
+    def evaluate(self, predictions, loss):
+        for doc_key, doc_example in self.coref_eval_data.items():
+            json_output = {'doc_key': doc_key}
 
-        predict_dict['loss'] = loss
-
-        doc_example = self.coref_eval_data[batch.doc_id[0].item()]
-
-        json_output = {'doc_key': batch.doc_key[0].item()}
-
-        sentences = doc_example["sentences"]
+            sentences = doc_example["sentences"]
 
 
-        self.log("info", "Decoding")
-        decoded_predictions = inference_utils.mtl_decode(
-            sentences, predict_dict, self.dataset.ner_labels_inv,
-            self.dataset.rel_labels_inv, self.config
-        )
-        self.log("info", "Decoding - Completed")
+            self.log("info", "Decoding")
+            decoded_predictions = inference_utils.mtl_decode(
+                sentences, predictions[doc_key], self.dataset.ner_labels_inv,
+                self.dataset.rel_labels_inv, self.config
+            )
+            self.log("info", "Decoding - Completed")
 
 
-        # Relation extraction.
-        if "rel" in decoded_predictions:
-            self.rel_predictions.extend(decoded_predictions["rel"])
-            json_output['relation'] = decoded_predictions["rel"]
+            # Relation extraction.
+            if "rel" in decoded_predictions:
+                self.rel_predictions.extend(decoded_predictions["rel"])
+                self.gold_rels.extend(self.eval_data[doc_key][3])
+                json_output['relation'] = decoded_predictions["rel"]
 
-            rel_sent_id = 0
-            for j in range(len(sentences)):
-                sent_example = self.eval_data[batch.doc_id[0].item()][rel_sent_id][3]  # sentence, srl, ner, relations
-                text_length = len(sentences[j])
-                ne = predict_dict["num_entities"][j]
-                gold_entities = set([])
-                for rel in sent_example:
-                    gold_entities.update([rel[:2], rel[2:4]])
+                rel_sent_id = 0
+                for j in range(len(sentences)):
+                    sent_example = self.eval_data[doc_key][rel_sent_id][3]  # sentence, srl, ner, relations
+                    text_length = len(sentences[j])
+                    ne = predictions[doc_key]["num_entities"][j]
+                    gold_entities = set([])
+                    for rel in sent_example:
+                        gold_entities.update([rel[:2], rel[2:4]])
 
+                    data_utils.evaluate_retrieval(
+                        predictions[doc_key]["candidate_starts"][j], predictions[doc_key]["candidate_ends"][j],
+                        predictions[doc_key]["candidate_entity_scores"][j], predictions[doc_key]["entity_starts"][j][:ne],
+                        predictions[doc_key]["entity_ends"][j][:ne], gold_entities, text_length, self.entity_evaluators)
+                    rel_sent_id += 1
+
+            if "ner" in decoded_predictions:
+                self.ner_predictions.extend(decoded_predictions["ner"])
+                self.gold_ner.extend(self.eval_data[doc_key][2])
+                json_output['ner'] = decoded_predictions["ner"]
+
+            if "predicted_clusters" in decoded_predictions:
+                gold_clusters = [tuple(tuple(m) for m in gc) for gc in doc_example["clusters"]]
+                gold_mentions = set([])
+                mention_to_gold = {}
+                for gc in gold_clusters:
+                    for mention in gc:
+                        mention_to_gold[mention] = gc
+                        gold_mentions.add(mention)
+                self.coref_evaluator.update(decoded_predictions["predicted_clusters"], gold_clusters,
+                                       decoded_predictions["mention_to_predicted"],
+                                       mention_to_gold)
+                self.coref_predictions[doc_example["doc_key"]] = decoded_predictions["predicted_clusters"]
+                json_output['coref'] = decoded_predictions["predicted_clusters"]
+
+                # Evaluate retrieval.
+                doc_text_length = sum([len(s) for s in sentences])
                 data_utils.evaluate_retrieval(
-                    predict_dict["candidate_starts"][j], predict_dict["candidate_ends"][j],
-                    predict_dict["candidate_entity_scores"][j], predict_dict["entity_starts"][j][:ne],
-                    predict_dict["entity_ends"][j][:ne], gold_entities, text_length, self.entity_evaluators)
-                rel_sent_id += 1
-
-        if "ner" in decoded_predictions:
-            self.ner_predictions.extend(decoded_predictions["ner"])
-            json_output['ner'] = decoded_predictions["ner"]
-
-        if "predicted_clusters" in decoded_predictions:
-            gold_clusters = [tuple(tuple(m) for m in gc) for gc in doc_example["clusters"]]
-            gold_mentions = set([])
-            mention_to_gold = {}
-            for gc in gold_clusters:
-                for mention in gc:
-                    mention_to_gold[mention] = gc
-                    gold_mentions.add(mention)
-            self.coref_evaluator.update(decoded_predictions["predicted_clusters"], gold_clusters,
-                                   decoded_predictions["mention_to_predicted"],
-                                   mention_to_gold)
-            self.coref_predictions[doc_example["doc_key"]] = decoded_predictions["predicted_clusters"]
-            json_output['coref'] = decoded_predictions["predicted_clusters"]
-
-            # Evaluate retrieval.
-            doc_text_length = sum([len(s) for s in sentences])
-            data_utils.evaluate_retrieval(
-                predict_dict["candidate_mention_starts"], predict_dict["candidate_mention_ends"],
-                predict_dict["candidate_mention_scores"], predict_dict["mention_starts"],
-                predict_dict["mention_ends"],
-                gold_mentions, doc_text_length, self.mention_evaluators)
-
-        self.total_loss += predict_dict["loss"]
-
-        self.log("info", "Finish evaluation")
+                    predictions[doc_key]["candidate_mention_starts"], predictions[doc_key]["candidate_mention_ends"],
+                    predictions[doc_key]["candidate_mention_scores"], predictions[doc_key]["mention_starts"],
+                    predictions[doc_key]["mention_ends"],
+                    gold_mentions, doc_text_length, self.mention_evaluators)
 
 
-        self.json_data.append(json_output)
+            self.json_data.append(json_output)
+
+            self.total_loss += loss
 
     def summarize_results(self):
         def _k_to_tag(k):
@@ -131,7 +127,7 @@ class Evaluator:
         # Summarize results.
         if self.config["relation_weight"] > 0:
             precision, recall, f1 = (
-                data_utils.compute_relation_f1(gold_relations, self.rel_predictions)
+                data_utils.compute_relation_f1(self.gold_rels, self.rel_predictions)
             )
 
             task_to_f1["relations"] = f1
@@ -148,7 +144,7 @@ class Evaluator:
 
         if self.config["ner_weight"] > 0:
             ner_precision, ner_recall, ner_f1, ul_ner_prec, ul_ner_recall, ul_ner_f1, ner_label_mat = (
-                data_utils.compute_span_f1(gold_ner, self.ner_predictions, "NER"))
+                data_utils.compute_span_f1(self.gold_ner, self.ner_predictions, "NER"))
             summary_dict["NER F1"] = ner_f1
             summary_dict["NER precision"] = ner_precision
             summary_dict["NER recall"] = ner_recall
@@ -157,7 +153,7 @@ class Evaluator:
             summary_dict["Unlabeled NER recall"] = ul_ner_recall
 
             # Write NER prediction to IOB format and run official eval script.
-            util.print_to_iob2(sentences, gold_ner, self.ner_predictions, self.config["ner_conll_eval_path"])
+            util.print_to_iob2(sentences, self.gold_ner, self.ner_predictions, self.config["ner_conll_eval_path"])
             task_to_f1["ner"] = ner_f1
 
         if self.config["coref_weight"] > 0:
@@ -177,7 +173,6 @@ class Evaluator:
                     results_to_print.append("{:<10}: {:.4f}".format(t, v))
                     summary_dict[t] = v
                 print(", ".join(results_to_print))
-
 
         summary_dict["Dev Loss"] = self.total_loss / len(self.coref_eval_data)
 

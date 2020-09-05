@@ -206,7 +206,7 @@ def main(args):
 
         logger.info("Saving models")
 
-        if epoch % 5 == 0:
+        if epoch % 1 == 0:
             torch.save(
                 graph_model.state_dict(),
                 f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
