@@ -13,6 +13,7 @@ import logging
 from models.vertex_embeddings import VertexEmbeddings
 import time
 import shutil
+import re
 
 logger = logging.getLogger('myapp')
 hdlr = logging.FileHandler('eval-sci.log')
@@ -49,7 +50,7 @@ def main(args):
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    model.to(args.device)
+    #model.to(args.device)
 
     evaluator = Evaluator(config, dataset, logger)
 
@@ -59,13 +60,22 @@ def main(args):
     best_task_f1 = {}
 
     while True:
-        models = glob.glob('model__*')
-        emb_models = glob.glob('vertex.*')
-        for i, model in enumerate(models):
+        models = glob.glob(f'{log_dir}/model__*')
+        emb_models = glob.glob(f'{log_dir}/vertex_*')
+
+        def extract_model_key(x):
+            return int(re.findall(r'\d+', x)[0])
+
+        models = sorted(models, key=extract_model_key)
+        emb_models = sorted(emb_models, key=extract_model_key)
+
+        for i, model_name in enumerate(models):
+            if "max" in model_name:
+                continue
             tmp_checkpoint_path = os.path.join(log_dir, "model.tmp")
             tmp_emb_path = os.path.join(log_dir, "vertex.tmp")
-            shutil.move(f"{log_dir}/{model}", tmp_checkpoint_path)
-            shutil.move(f"{log_dir}/{emb_models[i]}", tmp_emb_path)
+            shutil.move(model_name, tmp_checkpoint_path)
+            shutil.move(f"{emb_models[i]}", tmp_emb_path)
             model.load_state_dict(torch.load(tmp_checkpoint_path))
             vertex_cpt = torch.load(tmp_emb_path)
             vertex_embeddings.load_state_dict(vertex_cpt)
@@ -74,6 +84,7 @@ def main(args):
 
             if f1 > max_f1:
                 max_f1 = f1
+
 
                 for task, f1 in task_to_f1.items():
                     best_task_f1[task] = f1
@@ -103,9 +114,10 @@ def evaluate_for_mode(model, dataset, evaluator):
     )
 
     predictions = {}
+    total_loss = 0
     for count, batch in enumerate(data_iter):
         with torch.no_grad():
-            torch.set_default_tensor_type(torch.cuda.FloatTensor)
+            #torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
             doc_batch = dataset.fix_batch(batch)
 
@@ -113,7 +125,8 @@ def evaluate_for_mode(model, dataset, evaluator):
 
             predictions[batch.doc_key[0]] = predict_dict
 
-        evaluator.evaluate(predictions, loss)
+            total_loss += loss
+    evaluator.evaluate(predictions, total_loss)
 
     return evaluator.summarize_results()
 

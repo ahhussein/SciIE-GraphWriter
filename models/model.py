@@ -97,7 +97,7 @@ class Model(nn.Module):
             self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
 
 
-            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
+            #self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             entity_starts, entity_ends, entity_scores, num_entities, top_entity_indices = util.get_batch_topk(
                 candidate_starts, candidate_ends, candidate_entity_scores, self.config["entity_ratio"],
                 batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False,
@@ -153,7 +153,7 @@ class Model(nn.Module):
             assert not torch.isnan(candidate_mention_scores).any()
             self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
             self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
-            self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
+            #self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
             top_mention_indices = util.span_prune(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
