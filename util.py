@@ -7,7 +7,7 @@ import codecs
 import subprocess
 import math
 from sklearn.metrics import classification_report, precision_recall_fscore_support
-import psutil
+#import psutil
 import functools
 
 from pip._vendor.requests.models import CONTENT_CHUNK_SIZE, Response
@@ -20,12 +20,12 @@ if MYPY_CHECK_RUNNING:
 def get_config(filename):
     return pyhocon.ConfigFactory.parse_file(filename)
 
-def get_used_memory():
-    return dict(psutil.virtual_memory()._asdict())['used'] / (1024 * 1024 * 1024)
-
-def get_free_memory():
-    return dict(psutil.virtual_memory()._asdict())['free'] / (1024 * 1024 * 1024)
-
+# def get_used_memory():
+#     return dict(psutil.virtual_memory()._asdict())['used'] / (1024 * 1024 * 1024)
+#
+# def get_free_memory():
+#     return dict(psutil.virtual_memory()._asdict())['free'] / (1024 * 1024 * 1024)
+#
 
 def span_prune(
         span_scores,
@@ -39,15 +39,18 @@ def span_prune(
 ):
     def sort_span_indices(i1, i2):
         if candidate_starts[l][i1] < candidate_starts[l][i2]:
-            return True
+            return -1
         if candidate_starts[l][i1] > candidate_starts[l][i2]:
-            return False
+            return 1
         if candidate_ends[l][i1] < candidate_ends[l][i2]:
-            return True
+            return -1
         if candidate_ends[l][i1] > candidate_ends[l][i2]:
-            return False
+            return 1
 
-        return i1 < i2
+        if i1 < i2:
+            return -1
+        else:
+            return 1
 
     sort_span_keys = functools.cmp_to_key(sort_span_indices)
 
@@ -87,7 +90,7 @@ def span_prune(
             i = sorted_input_span_indices[l][current_span_index]
 
             any_crossing = False
-            if (suppress_crossing):
+            if suppress_crossing:
                 start = candidate_starts[l][i]
                 end = candidate_ends[l][i]
 
@@ -112,7 +115,7 @@ def span_prune(
 
             if not any_crossing:
                 if sort_spans:
-                    top_span_indices.append(i)
+                    top_span_indices.append(i.item())
                 else:
                     output_span_indices[l][num_selected_spans] = i
 
@@ -142,7 +145,6 @@ def span_prune(
         if sort_spans:
             top_span_indices = sorted(top_span_indices, key=sort_span_keys)
 
-            # TODO vertorize if needed
             for i in range(num_output_spans[l]):
                 output_span_indices[l][i] = top_span_indices[i]
 

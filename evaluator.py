@@ -31,7 +31,8 @@ class Evaluator:
         self.logger = logger
 
 
-    def evaluate(self, predictions, loss):
+    def evaluate(self, predictions, total_loss):
+        self.total_loss = total_loss
         for doc_key, doc_example in self.coref_eval_data.items():
             json_output = {'doc_key': doc_key}
 
@@ -49,7 +50,10 @@ class Evaluator:
             # Relation extraction.
             if "rel" in decoded_predictions:
                 self.rel_predictions.extend(decoded_predictions["rel"])
-                self.gold_rels.extend(self.eval_data[doc_key][3])
+                goldrels = [gsentence[3] for gsentence in [gsentences for gsentences in self.eval_data[doc_key]]]
+                #goldrels_flattened = [item for sublist in goldrels for item in sublist]
+
+                self.gold_rels.extend(goldrels)
                 json_output['relation'] = decoded_predictions["rel"]
 
                 rel_sent_id = 0
@@ -69,7 +73,10 @@ class Evaluator:
 
             if "ner" in decoded_predictions:
                 self.ner_predictions.extend(decoded_predictions["ner"])
-                self.gold_ner.extend(self.eval_data[doc_key][2])
+                goldners = [gsentence[2] for gsentence in [gsentences for gsentences in self.eval_data[doc_key]]]
+                #goldners_flattened = [item for sublist in goldners for item in sublist]
+
+                self.gold_ner.extend(goldners)
                 json_output['ner'] = decoded_predictions["ner"]
 
             if "predicted_clusters" in decoded_predictions:
@@ -97,7 +104,6 @@ class Evaluator:
 
             self.json_data.append(json_output)
 
-            self.total_loss += loss
 
     def summarize_results(self):
         def _k_to_tag(k):

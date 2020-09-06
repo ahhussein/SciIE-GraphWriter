@@ -37,26 +37,24 @@ def main():
 
     config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
 
-    # Dynamic batch size.
-    config["batch_size"] = -1
-    config["max_tokens_per_batch"] = -1
-
-    vertex_model_name = 'vertex_embeddings__31'
 
     dataset = DocumentDataset(config=config, is_eval=True)
+
+    vertex_model_name = 'vertex_embeddings__31'
+    model_eval_name = 'model__1.loss-0.0.lr-0.0005'
 
     vertex_embeddings = VertexEmbeddings(config, dataset)
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    model.to(args.device)
+    #model.to(args.device)
 
-    evaluator = Evaluator(config, dataset, model, logger)
+    evaluator = Evaluator(config, dataset, logger)
 
     # TODO log
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__1.loss-0.0.lr-0.0005"))
+    model.load_state_dict(torch.load(f"{log_dir}/{model_eval_name}"))
 
     vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
     vertex_embeddings.load_state_dict(vertex_cpt)
@@ -71,25 +69,22 @@ def main():
         train=False
     )
 
+    predictions = {}
+    total_loss = 0
     for count, batch in enumerate(data_iter):
         with torch.no_grad():
+            #torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
             doc_batch = dataset.fix_batch(batch)
-            logger.info(f"Batch size: {doc_batch.text_len}")
-            logger.info(f"Batch key: {doc_batch.doc_key}")
-            evaluator.evaluate(doc_batch)
+            predict_dict, loss = model(doc_batch)
 
-            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+            predictions[batch.doc_key[0]] = predict_dict
+
+            logger.info("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+
+            total_loss += loss
+    evaluator.evaluate(predictions, total_loss)
     evaluator.write_out()
-    # Move to evaualtor
-    # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()
-    # print(summary_dict)
-    # print(main_metric)
-    # print(task_to_f1)
-
-
-
-
 
 
 if __name__ == "__main__":
