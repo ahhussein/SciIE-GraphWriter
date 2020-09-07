@@ -72,6 +72,10 @@ def main(args):
     else:
         model = None
 
+    vertex_embeddings.embeddings.writer = writer
+    if model:
+        model.writer = writer
+
     # Move models to gpu?
     # m = MODEL.to(args.device)
 
