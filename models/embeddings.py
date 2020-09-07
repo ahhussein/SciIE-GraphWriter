@@ -22,14 +22,13 @@ class CharEmbeddings(nn.Module):
         self.relu = nn.ReLU()  # [num_words, num_chars - filter_size, num_filters]
         self.embeddings = nn.Parameter(emb)
 
-    def forward(self, char_index, writer):
+    def forward(self, char_index):
         # number-sentences x max-sentence-length x max-word-length (over all sentences)
         num_sentences = char_index.shape[0]
         max_sentence_length = char_index.shape[1]
 
         # [num_sentences, max_sentence_length, max_word_length, emb]
         char_emb = self.embeddings[char_index]
-        writer.add_histogram('char_emb', self.embeddings)
 
         # [num_sentences * max_sentence_length, max_word_length, emb]
         flattened_char_emb = char_emb.view(num_sentences * max_sentence_length, char_emb.shape[2], -1)
@@ -91,7 +90,7 @@ class Embeddings(nn.Module):
 
         # calculate and append char embeddings
         # [num_sentences, max_sentence_length, emb-char]
-        aggregated_char_emb = self.char_embeddings(batch.char_idx, self.writer)
+        aggregated_char_emb = self.char_embeddings(batch.char_idx)
         context_emb_list.append(aggregated_char_emb)
         head_emb_list.append(aggregated_char_emb)
 

@@ -74,7 +74,6 @@ class Model(nn.Module):
             # score candidates
             # [num-candidates]
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
-            self.writer.add_histogram("entity_unary_scores", flat_candidate_entity_scores)
 
             # Get flat candidate scores in the original shape # [num_sentences, max_num_candidates]
             # give -inf to the padded spans
@@ -130,7 +129,6 @@ class Model(nn.Module):
             # Score independent from relation pruning
             candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
             doc_ids = batch.doc_id.unsqueeze(1)
-            self.writer.add_histogram("mentions_unary_scores", candidate_mention_scores)
 
             candidate_doc_ids = torch.masked_select(
                 doc_ids.repeat([1, max_num_candidates_per_sentence]).view(-1),
@@ -217,17 +215,13 @@ class Model(nn.Module):
             antecedent_log_mask = torch.log(antecedent_mask.type(torch.float32))  # [k, max_ant]
 
             # [k, max_ant], [k, max_ant, emb], [k, max_ant, emb2]
-            self.log('info', "antecendent - scores -- Started")
             antecedent_scores, antecedent_emb, pair_emb = self.antecedent_scores(
                 mention_emb, mention_scores, antecedents
             )  # [k, max_ant]
-            self.log('info', "antecendent - scores -- Completed")
 
             # zero out (out of document range) score and -index scores - mention zero
             antecedent_scores = torch.cat([
                 torch.zeros([k, 1]), antecedent_scores + antecedent_log_mask], 1)  # [k, max_ant+1]
-
-            self.writer.add_histogram("ant_scores", antecedent_scores)
 
         # Get labels.
         if self.config["ner_weight"] + self.config["coref_weight"] > 0:
@@ -244,7 +238,6 @@ class Model(nn.Module):
             )  # [num_sentences, max_num_ents, max_num_ents]
 
             # TODO rel mask is needed here to avoid the padding
-            self.log('info', "rel - scores -- Started")
 
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,  # [num_sentences, max_num_ents, emb]
@@ -252,8 +245,6 @@ class Model(nn.Module):
                 rel_labels,  # [num_sentences, max_num_ents, max_num_ents]
                 num_entities
             )  # [num_sentences, max_num_ents, max_num_ents, num_labels]
-            self.log('info', "rel - scores -- Completed")
-            self.writer.add_histogram("rel_scores_2d", rel_scores)
 
             # Rearrange scores
             flattened_scores = rel_scores.view(-1, 8)
@@ -355,8 +346,6 @@ class Model(nn.Module):
                 gold_ner_labels,
                 candidate_mask
             )
-
-            self.writer.add_histogram("ner_scores", ner_scores)
 
             predict_dict["ner_scores"] = ner_scores
 
