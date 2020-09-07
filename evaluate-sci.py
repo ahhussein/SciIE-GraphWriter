@@ -1,4 +1,4 @@
-
+\
 import glob
 import sys
 import os
@@ -50,13 +50,13 @@ def main(args):
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    #model.to(args.device)
+    model.to(args.device)
 
     evaluator = Evaluator(config, dataset, logger)
 
     log_dir = config["log_dir"]
 
-    max_f1 = 0
+    max_f1 = -1
     best_task_f1 = {}
 
     while True:
@@ -89,7 +89,7 @@ def main(args):
                 for task, f1 in task_to_f1.items():
                     best_task_f1[task] = f1
 
-                shutil.copy(tmp_checkpoint_path, f"{log_dir}/model.max)")
+                shutil.copy(tmp_checkpoint_path, f"{log_dir}/model.max")
                 shutil.copy(tmp_emb_path, f"{log_dir}/vertex.max)")
 
             logger.info(f"Current max combined F1: {max_f1}")
@@ -117,7 +117,7 @@ def evaluate_for_mode(model, dataset, evaluator):
     total_loss = 0
     for count, batch in enumerate(data_iter):
         with torch.no_grad():
-            #torch.set_default_tensor_type(torch.cuda.FloatTensor)
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
             doc_batch = dataset.fix_batch(batch)
 
