@@ -72,6 +72,10 @@ def main(args):
     else:
         model = None
 
+
+    # Move models to gpu?
+    m = MODEL.to(args.device)
+
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
         config.batch_size,
@@ -163,6 +167,12 @@ def main(args):
 
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
         writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
+        writer.add_histogram('char_emb', vertex_embeddings.embeddings.char_embeddings.embeddings, epoch)
+        writer.add_histogram('entity_unary_scores', predict_dict['candidate_entity_scores'], epoch)
+        writer.add_histogram('candidate_mention_scores', predict_dict['candidate_mention_scores'], epoch)
+        writer.add_histogram('ant_scores', predict_dict['antecedent_scores'], epoch)
+        writer.add_histogram('rel_scores_2d', predict_dict['rel_scores'], epoch)
+        writer.add_histogram('ner_scores', predict_dict['ner_scores'], epoch)
 
         scheduler.step()
 

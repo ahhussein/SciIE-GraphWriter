@@ -14,7 +14,6 @@ class Model(nn.Module):
         super().__init__()
         self.config = config
         self.data = data
-        self.embeddings = Embeddings(config, data)
         self.vertex_embeddings = vertex_embeddings
         self.unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
@@ -74,11 +73,7 @@ class Model(nn.Module):
         if self.config["relation_weight"] > 0:
             # score candidates
             # [num-candidates]
-
-            self.log('info', "unary scores - rels -- Started")
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
-            self.log('info', "unary scores - rels -- Completed")
-
 
             # Get flat candidate scores in the original shape # [num_sentences, max_num_candidates]
             # give -inf to the padded spans
@@ -87,7 +82,6 @@ class Model(nn.Module):
             # entity_starts = entity_ends = entity_scores(same score as candidate_entity_scores but pruned) = [num_sentences, max_num_ents]
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
-            self.log('info', "topk - relations -- Started")
             # Crossing is allowed which means it can return overlapping spans
 
             assert not torch.isnan(candidate_entity_scores).any()
@@ -133,11 +127,8 @@ class Model(nn.Module):
             # score mentions
             # [num-candidates]
             # Score independent from relation pruning
-            self.log('info', "unary scores - mentions -- Started")
             candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
             doc_ids = batch.doc_id.unsqueeze(1)
-            self.log('info', "unary scores - mentions -- Completed")
-
 
             candidate_doc_ids = torch.masked_select(
                 doc_ids.repeat([1, max_num_candidates_per_sentence]).view(-1),
@@ -149,7 +140,6 @@ class Model(nn.Module):
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
             # Crossing is not allowed which means it will always returns spans that doesn't overlap with each other
-            self.log('info', "topk -- mentions -- Started")
             assert not torch.isnan(candidate_mention_scores).any()
             self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
             self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
@@ -164,7 +154,6 @@ class Model(nn.Module):
                 True,
                 self.logger
             )  # [1, topk]
-            self.log('info', "topk -- mentions -- Completed")
 
             top_mention_indices = torch.squeeze(top_mention_indices).type(torch.int64)  # [k]
 
@@ -225,11 +214,9 @@ class Model(nn.Module):
             antecedent_log_mask = torch.log(antecedent_mask.type(torch.float32))  # [k, max_ant]
 
             # [k, max_ant], [k, max_ant, emb], [k, max_ant, emb2]
-            self.log('info', "antecendent - scores -- Started")
             antecedent_scores, antecedent_emb, pair_emb = self.antecedent_scores(
                 mention_emb, mention_scores, antecedents
             )  # [k, max_ant]
-            self.log('info', "antecendent - scores -- Completed")
 
             # zero out (out of document range) score and -index scores - mention zero
             antecedent_scores = torch.cat([
@@ -250,7 +237,6 @@ class Model(nn.Module):
             )  # [num_sentences, max_num_ents, max_num_ents]
 
             # TODO rel mask is needed here to avoid the padding
-            self.log('info', "rel - scores -- Started")
 
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,  # [num_sentences, max_num_ents, emb]
@@ -258,7 +244,6 @@ class Model(nn.Module):
                 rel_labels,  # [num_sentences, max_num_ents, max_num_ents]
                 num_entities
             )  # [num_sentences, max_num_ents, max_num_ents, num_labels]
-            self.log('info', "rel - scores -- Completed")
 
             # Rearrange scores
             flattened_scores = rel_scores.view(-1, 8)
