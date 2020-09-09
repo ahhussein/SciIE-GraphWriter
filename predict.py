@@ -71,6 +71,7 @@ def main():
 
     predictions = {}
     total_loss = 0
+    model.eval()
     for count, batch in enumerate(data_iter):
         with torch.no_grad():
             #torch.set_default_tensor_type(torch.cuda.FloatTensor)
