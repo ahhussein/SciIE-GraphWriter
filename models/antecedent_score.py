@@ -6,9 +6,9 @@ class AntecedentScore(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.antecedent_distance_emb = nn.init.xavier_uniform_(
-            torch.empty(10, self.config["feature_size"])
-        )
+        emb = torch.empty(10, self.config["feature_size"])
+        nn.init.uniform_(emb)
+        self.antecedent_distance_emb = nn.Parameter(emb)
 
         self.input = nn.Linear(
             3830, #TODO
