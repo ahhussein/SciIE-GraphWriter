@@ -40,14 +40,14 @@ def main():
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    vertex_model_name = 'vertex_embeddings__31'
-    model_eval_name = 'model__1.loss-0.0.lr-0.0005'
+    vertex_model_name = 'vertex_embeddings__100'
+    model_eval_name = 'model__96.loss-0.0.lr-0.00045466485573132946'
 
     vertex_embeddings = VertexEmbeddings(config, dataset)
 
     model = Model(config, dataset, vertex_embeddings, logger)
 
-    #model.to(args.device)
+    model.to(args.device)
 
     evaluator = Evaluator(config, dataset, logger)
 
