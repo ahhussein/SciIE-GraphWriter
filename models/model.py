@@ -106,9 +106,10 @@ class Model(nn.Module):
             entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
 
 
+            # [num_sentences, max_num_ents, emb]
+            entity_emb = candidate_span_emb[entity_span_indices]
+
             if not self.train_disjoint:
-                # [num_sentences, max_num_ents, emb]
-                entity_emb = candidate_span_emb[entity_span_indices]
                 entities_mask = util.sequence_mask(num_entities, entity_emb.shape[1]).view(-1)
 
                 top_span_indices_rels = entity_span_indices.view(-1)[entities_mask]
