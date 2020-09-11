@@ -416,9 +416,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             # if abs(max) < 1e-3 or abs(max) > 1e3:
             #     print(f"min: {max}")
 
-
-            writer.add_histogram(name, param.clone().detach().cpu().numpy(), step, bins=20)
-            writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)
+            if param.grad is not None:
+                writer.add_histogram(name, param.clone().detach().cpu().numpy(), step, bins=20)
+                writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
@@ -430,6 +430,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
         if train_graph or train_joint:
             nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
+
+
+
+
 
         optimizer.zero_grad()
 
