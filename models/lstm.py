@@ -9,14 +9,6 @@ class LSTMContextualize(nn.Module):
         self.config = config
         self.data = data
 
-        self.lstms = nn.ModuleList(nn.LSTM(
-                        config['embedding_size_contactenated'],
-                        config['contextualization_size'],
-                        bidirectional=True,
-                        num_layers=1,
-                        batch_first=True
-                    ) for i in range(self.config['contextualization_layers']))
-
         self.lstm = BidirLSTMLayer(
             CustomLSTMCell,
             config['embedding_size_contactenated'],
@@ -40,7 +32,6 @@ class LSTMContextualize(nn.Module):
         context_emb = context_emb.transpose(0,1)
 
         if not state:
-            # TODO initilazation
             states = [torch.empty(
                     context_emb.shape[1],
                     self.config['contextualization_size']

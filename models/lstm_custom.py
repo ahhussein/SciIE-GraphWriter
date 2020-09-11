@@ -63,7 +63,6 @@ class CustomLSTMCell(nn.Module):
         self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
         self.bias_ih = Parameter(torch.randn(3 * hidden_size))
         self.bias_hh = Parameter(torch.randn(3 * hidden_size))
-        self.sigmoid = nn.Sigmoid()
 
         self.weight_ih.weight = self.weights_init(self.weight_ih.shape)
         self.weight_hh.weight = self.weights_init(self.weight_hh.shape)
@@ -80,9 +79,9 @@ class CustomLSTMCell(nn.Module):
                  torch.mm(hx, self.weight_hh.t()) + self.bias_hh)
         i, j, o = gates.chunk(3, 1)
 
-        i = self.sigmoid(i)
+        i = torch.sigmoid(i)
         new_cx = (1 - i) * cx + i * torch.tanh(j)
-        new_h = torch.tanh(new_cx) * self.sigmoid(o)
+        new_h = torch.tanh(new_cx) * torch.sigmoid(o)
 
         return new_h, (new_h, new_cx)
 
