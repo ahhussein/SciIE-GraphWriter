@@ -407,7 +407,18 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         writer.add_scalar('t/total/batch', total_loss.item(), step)
 
         for name, param in model.named_parameters():
-            writer.add_histogram('grads/' + name, param.clone().detach().cpu().numpy(), step, bins=20)
+            # min = torch.min(param)
+            # max = torch.max(param)
+
+            # if abs(min) < 1e-3 or abs(min) > 1e3:
+            #     print(f"min: {min}")
+            #
+            # if abs(max) < 1e-3 or abs(max) > 1e3:
+            #     print(f"min: {max}")
+
+
+            writer.add_histogram(name, param.clone().detach().cpu().numpy(), step, bins=20)
+            writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)
 
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
