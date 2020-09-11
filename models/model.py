@@ -16,6 +16,7 @@ class Model(nn.Module):
         self.data = data
         self.vertex_embeddings = vertex_embeddings
         self.unary_scores = UnaryScores(config)
+        self.mention_unary_scores = UnaryScores(config)
         self.antecedent_scores = AntecedentScore(config)
         self.rel_scores = RelScores(config, len(self.data.rel_labels))
         self.ner_scores = NerScores(config, len(self.data.ner_labels))
@@ -83,12 +84,12 @@ class Model(nn.Module):
             # num_entities = [num_sentences,]
             # top_entity_indices = [num_sentences, max_num_ents]
             # Crossing is allowed which means it can return overlapping spans
-
-            assert not torch.isnan(candidate_entity_scores).any()
-            candidate_entity_scores[candidate_entity_scores == float('-inf')] = -1e9
-
-            self.log('info', f'min candidate entity score: {torch.min(candidate_entity_scores)}')
-            self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
+            #
+            # assert not torch.isnan(candidate_entity_scores).any()
+            # candidate_entity_scores[candidate_entity_scores == float('-inf')] = -1e9
+            #
+            # self.log('info', f'min candidate entity score: {torch.min(candidate_entity_scores)}')
+            # self.log('info', f'max candidate entity score: {torch.max(candidate_entity_scores)}')
 
 
             #self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
@@ -97,37 +98,38 @@ class Model(nn.Module):
                 batch.text_len, max_sentence_length, self.config.device, sort_spans=True, enforce_non_crossing=False,
                 logger=self.logger
             )
-            self.log('info', "topk - relations -- Completed")
+
 
 
             # [num_sentences, max_num_ents]
             # absolute indices (offset added)
             entity_span_indices = util.batch_gather(candidate_span_ids, top_entity_indices)
 
-            # [num_sentences, max_num_ents, emb]
-            entity_emb = candidate_span_emb[entity_span_indices]
 
-            entities_mask = util.sequence_mask(num_entities, entity_emb.shape[1]).view(-1)
+            if not self.train_disjoint:
+                # [num_sentences, max_num_ents, emb]
+                entity_emb = candidate_span_emb[entity_span_indices]
+                entities_mask = util.sequence_mask(num_entities, entity_emb.shape[1]).view(-1)
 
-            top_span_indices_rels = entity_span_indices.view(-1)[entities_mask]
+                top_span_indices_rels = entity_span_indices.view(-1)[entities_mask]
 
-            doc_lens = []
-            offset = 0
-            doc2idx = {}
-            for count, dlen in enumerate(batch.doc_len):
-                doc_lens.append(sum(num_entities[offset:offset + dlen]))
-                doc2idx[batch.doc_id[offset].item()] = count
-                offset += dlen
+                doc_lens = []
+                offset = 0
+                doc2idx = {}
+                for count, dlen in enumerate(batch.doc_len):
+                    doc_lens.append(sum(num_entities[offset:offset + dlen]))
+                    doc2idx[batch.doc_id[offset].item()] = count
+                    offset += dlen
 
-            # Split span ids
-            top_span_indices_rels = list(top_span_indices_rels.split(doc_lens))
+                # Split span ids
+                top_span_indices_rels = list(top_span_indices_rels.split(doc_lens))
 
         # Get coref representations.
         if self.config["coref_weight"] > 0:
             # score mentions
             # [num-candidates]
             # Score independent from relation pruning
-            candidate_mention_scores = self.unary_scores(candidate_span_emb)  # [num_candidates]
+            candidate_mention_scores = self.mention_unary_scores(candidate_span_emb)  # [num_candidates]
             doc_ids = batch.doc_id.unsqueeze(1)
 
             candidate_doc_ids = torch.masked_select(
@@ -163,20 +165,21 @@ class Model(nn.Module):
             mention_emb = candidate_span_emb[top_mention_indices]  # [k, emb]
             mention_doc_ids = candidate_doc_ids[top_mention_indices]  # [k]
 
-            top_span_indices, mention_idx = self.append_mention_idx(
-                top_span_indices_rels,
-                doc2idx,
-                batch.doc_len,
-                top_mention_indices,
-                mention_doc_ids
-            )
+            if not self.train_disjoint:
+                top_span_indices, mention_idx = self.append_mention_idx(
+                    top_span_indices_rels,
+                    doc2idx,
+                    batch.doc_len,
+                    top_mention_indices,
+                    mention_doc_ids
+                )
 
-            # ent_coref_lens = [len(item) for item in top_span_indices]
+                # ent_coref_lens = [len(item) for item in top_span_indices]
 
-            # Top spans of interest (to be passed to graphwriter)
-            top_spans = candidate_span_emb[torch.cat(top_span_indices, 0)]
+                # Top spans of interest (to be passed to graphwriter)
+                top_spans = candidate_span_emb[torch.cat(top_span_indices, 0)]
 
-            num_doc_entities = [len(x) for x in top_span_indices]
+                num_doc_entities = [len(x) for x in top_span_indices]
 
             if head_scores is not None:
                 predict_dict["coref_head_scores"] = head_scores
