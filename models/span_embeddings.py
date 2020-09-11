@@ -1,6 +1,7 @@
 from torch import nn, dtype
 import torch
 import util
+import torch.nn.functional as nnf
 
 class SpanEmbeddings(nn.Module):
     def __init__(self, config, data):
@@ -112,30 +113,28 @@ class UnaryScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.relu = nn.ReLU()
-
         self.output = nn.Linear(
             self.config["ffnn_size"],
             1
         )
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = 1 - self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
 
     def forward(self, candidate_span_emb):
         # candidate_span_emb = [num-candidates, emb]
-        hidden1 = self.dropout(
-                    self.relu(
-                        self.input(candidate_span_emb)
-                    )
+        hidden1 = nnf.dropout(
+            nnf.relu(
+                self.input(candidate_span_emb)
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-                    self.relu(
-                        self.hidden(hidden1)
-                    )
+        hidden2 = nnf.dropout(
+            nnf.relu(
+                self.hidden(hidden1)
+            ), self.dropout
         )
 
 
