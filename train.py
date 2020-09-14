@@ -390,6 +390,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         #plot_grad_flow(graph_model.named_parameters(), writer)
 
 
+        # Summarize results
+        step = count + offset
+
         step_list = []
         if train_graph or train_joint:
             step_list.append('graph')
@@ -421,9 +424,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
 
         # Number of documents
         ex += len(batch.doc_len)
-
-        # Summarize results
-        step = count + offset
 
         writer.add_scalar('t/sci_loss/batch', sci_loss.item(), step)
         writer.add_scalar('t/gr_loss/batch', gr_loss.item(), step)
