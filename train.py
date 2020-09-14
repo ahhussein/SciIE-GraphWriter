@@ -74,7 +74,7 @@ def main(args):
 
 
     # Move models to gpu?
-    m = MODEL.to(args.device)
+    m = model.to(args.device)
 
     data_iter = data.Iterator(
         dataset_wrapper.dataset,
