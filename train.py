@@ -372,6 +372,9 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         else:
             gr_loss = torch.tensor(0)
 
+
+        optimizer.zero_grad()
+
         if train_joint:
             total_loss = config['graph_writer_weight'] * gr_loss + config['scierc_weight'] * sci_loss
             total_loss.backward()
@@ -393,17 +396,10 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
         if train_sci or train_joint:
             step_list.append('sci')
 
-        optimizer.step(step_list)
-
-        # Number of documents
-        ex += len(batch.doc_len)
-
-        # Summarize results
-        step = count + offset
-
-        writer.add_scalar('t/sci_loss/batch', sci_loss.item(), step)
-        writer.add_scalar('t/gr_loss/batch', gr_loss.item(), step)
-        writer.add_scalar('t/total/batch', total_loss.item(), step)
+        if train_sci or train_joint:
+            nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
+        if train_graph or train_joint:
+            nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
 
         for name, param in model.named_parameters():
             # min = torch.min(param)
@@ -419,22 +415,24 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 writer.add_histogram(name, param.clone().detach().cpu().numpy(), step, bins=20)
                 writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)
 
+
+        optimizer.step(step_list)
+
+        # Number of documents
+        ex += len(batch.doc_len)
+
+        # Summarize results
+        step = count + offset
+
+        writer.add_scalar('t/sci_loss/batch', sci_loss.item(), step)
+        writer.add_scalar('t/gr_loss/batch', gr_loss.item(), step)
+        writer.add_scalar('t/total/batch', total_loss.item(), step)
+
         # Zero gradients, perform a backward pass, and update params for the model1
         # optimizer.zero_grad()
         # sci_loss.backward()
         # torch.nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
         # optimizer.step()
-
-        if train_sci or train_joint:
-            nn.utils.clip_grad_norm_(model.parameters(), dataset.config["max_gradient_norm"])
-        if train_graph or train_joint:
-            nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
-
-
-
-
-
-        optimizer.zero_grad()
 
 
     return predict_dict, l / (ex), sc_loss / (ex), g_loss / (ex), step
