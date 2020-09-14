@@ -7,6 +7,7 @@ from collections import namedtuple
 from typing import List, Tuple
 from torch import Tensor
 import numbers
+import torch.nn.functional as nnf
 
 '''
 Some helper classes for writing custom TorchScript LSTMs.
@@ -54,9 +55,8 @@ class LSTMCell(nn.Module):
         return hy, (hy, cy)
 
 class CustomLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout):
+    def __init__(self, input_size, hidden_size):
         super(CustomLSTMCell, self).__init__()
-        self.dropout = nn.Dropout(dropout)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.weight_ih = Parameter(torch.randn(3 * hidden_size, input_size))
@@ -67,13 +67,11 @@ class CustomLSTMCell(nn.Module):
         self.weight_ih.weight = self.weights_init(self.weight_ih.shape)
         self.weight_hh.weight = self.weights_init(self.weight_hh.shape)
 
-    def forward(self, input, state):
+    def forward(self, input, state, dropout_mask):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
 
-        # dropout_mask = self.dropout(torch.ones_like(hx))
-
-        # hx *= dropout_mask
+        hx *= dropout_mask
 
         gates = (torch.mm(input, self.weight_ih.t()) + self.bias_ih +
                  torch.mm(hx, self.weight_hh.t()) + self.bias_hh)
@@ -97,31 +95,39 @@ class CustomLSTMCell(nn.Module):
         return params
 
 class LSTMLayer(nn.Module):
-    def __init__(self, cell, *cell_args):
+    def __init__(self, cell, dropout, *cell_args):
         super(LSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
+        self.dropout = dropout
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         inputs = input.unbind(0)
         outputs = torch.jit.annotate(List[Tensor], [])
+
+        dropout_mask = nnf.dropout(torch.ones_like(state[0]), self.dropout)
+
         for i in range(len(inputs)):
-            out, state = self.cell(inputs[i], state)
+            out, state = self.cell(inputs[i], state, dropout_mask)
             outputs += [out]
         return torch.stack(outputs), state
 
 
 class ReverseLSTMLayer(nn.Module):
-    def __init__(self, cell, *cell_args):
+    def __init__(self, cell, dropout, *cell_args):
         super(ReverseLSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
+        self.dropout = dropout
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         inputs = reverse(input.unbind(0))
         outputs = jit.annotate(List[Tensor], [])
+
+        dropout_mask = nnf.dropout(torch.ones_like(state[0]), self.dropout)
+
         for i in range(len(inputs)):
-            out, state = self.cell(inputs[i], state)
+            out, state = self.cell(inputs[i], state, dropout_mask)
             outputs += [out]
         return torch.stack(reverse(outputs)), state
 
@@ -129,11 +135,11 @@ class ReverseLSTMLayer(nn.Module):
 class BidirLSTMLayer(nn.Module):
     __constants__ = ['directions']
 
-    def __init__(self, cell, *cell_args):
+    def __init__(self, cell, dropout, *cell_args):
         super(BidirLSTMLayer, self).__init__()
         self.directions = nn.ModuleList([
-            LSTMLayer(cell, *cell_args),
-            ReverseLSTMLayer(cell, *cell_args),
+            LSTMLayer(cell, dropout, *cell_args),
+            ReverseLSTMLayer(cell, dropout, *cell_args),
         ])
 
     def forward(self, input, states):

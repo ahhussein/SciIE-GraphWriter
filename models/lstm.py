@@ -11,9 +11,9 @@ class LSTMContextualize(nn.Module):
 
         self.lstm = BidirLSTMLayer(
             CustomLSTMCell,
+            1 - self.config['lstm_dropout_rate'],
             config['embedding_size_contactenated'],
-            config['contextualization_size'],
-            1 - self.config['lstm_dropout_rate']
+            config['contextualization_size']
         )
 
         self.dropout = nn.Dropout(1 - self.config['lstm_dropout_rate'])
@@ -32,10 +32,12 @@ class LSTMContextualize(nn.Module):
         context_emb = context_emb.transpose(0,1)
 
         if not state:
+
             states = [torch.empty(
                     context_emb.shape[1],
                     self.config['contextualization_size']
                 ) for i in range(4)]
+
 
             [torch.nn.init.xavier_uniform_(state) for state in states]
 
