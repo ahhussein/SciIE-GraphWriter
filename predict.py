@@ -40,8 +40,7 @@ def main():
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    vertex_model_name = 'vertex_embeddings__100'
-    model_eval_name = 'model__96.loss-0.0.lr-0.00045466485573132946'
+    model_eval_name = 'model__3.loss-0.0.lr-0.0004990005'
 
     vertex_embeddings = VertexEmbeddings(config, dataset)
 
@@ -55,9 +54,6 @@ def main():
     log_dir = config["log_dir"]
 
     model.load_state_dict(torch.load(f"{log_dir}/{model_eval_name}"))
-
-    vertex_cpt = torch.load(f"{config['log_dir']}/{vertex_model_name}")
-    vertex_embeddings.load_state_dict(vertex_cpt)
 
     # Load batch of sentences for each document
     data_iter = data.Iterator(

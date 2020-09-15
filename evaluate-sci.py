@@ -73,12 +73,8 @@ def main(args):
             if "max" in model_name:
                 continue
             tmp_checkpoint_path = os.path.join(log_dir, "model.tmp")
-            tmp_emb_path = os.path.join(log_dir, "vertex.tmp")
             shutil.move(model_name, tmp_checkpoint_path)
-            shutil.move(f"{emb_models[i]}", tmp_emb_path)
             model.load_state_dict(torch.load(tmp_checkpoint_path))
-            vertex_cpt = torch.load(tmp_emb_path)
-            vertex_embeddings.load_state_dict(vertex_cpt)
 
             eval_summary, f1, task_to_f1 = evaluate_for_mode(model, dataset, evaluator)
 
@@ -90,7 +86,6 @@ def main(args):
                     best_task_f1[task] = f1
 
                 shutil.copy(tmp_checkpoint_path, f"{log_dir}/model.max)")
-                shutil.copy(tmp_emb_path, f"{log_dir}/vertex.max)")
 
             logger.info(f"Current max combined F1: {max_f1}")
 
@@ -98,7 +93,6 @@ def main(args):
                 logger.info(f"Max {task} F1: {f1}")
 
             os.remove(tmp_checkpoint_path)
-            os.remove(tmp_emb_path)
 
         time.sleep(config["eval_sleep_secs"])
 

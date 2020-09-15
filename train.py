@@ -160,11 +160,6 @@ def main(args):
             f"{config['log_dir']}/model__{epoch + 1}.loss-{loss}.lr-{str(sci_opt.param_groups[0]['lr'])}"
         )
 
-        torch.save(
-            vertex_embeddings.state_dict(),
-            f"{config['log_dir']}/vertex_embeddings__{epoch + 1}"
-        )
-
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
         writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
         writer.add_histogram('char_emb', vertex_embeddings.embeddings.char_embeddings.embeddings, epoch)
@@ -493,7 +488,7 @@ def evaluate(model, graph_model, dataset, data_iter, device, config, train_graph
     if graph_model:
         graph_model.train()
 
-    return l / ex, sci_loss.item() / count, gr_loss.item() / count
+    return l / ex, sci_loss.item() / ex, gr_loss.item() / ex
 
 
 # def plot_grad_flow(named_parameters, writer):
