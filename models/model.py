@@ -73,7 +73,7 @@ class Model(nn.Module):
         # Get entity representations.
         if self.config["relation_weight"] > 0:
             # score candidates
-            # [num-candidates]
+            # [num-candidates] # TODO check scores what effects them
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
 
             # Get flat candidate scores in the original shape # [num_sentences, max_num_candidates]
@@ -144,9 +144,9 @@ class Model(nn.Module):
             # mention scores are independant from span scores and can result in different spans
             # Crossing is not allowed which means it will always returns spans that doesn't overlap with each other
             assert not torch.isnan(candidate_mention_scores).any()
-            self.log('info', f'min mention score: {torch.min(candidate_mention_scores)}')
-            self.log('info', f'max mention score: {torch.max(candidate_mention_scores)}')
-            #self.log("info", f'used memory: {util.get_used_memory()} - Free memory: {util.get_free_memory()}')
+
+
+
             top_mention_indices = util.span_prune(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),

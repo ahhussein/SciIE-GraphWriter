@@ -34,8 +34,8 @@ class LSTMCell(nn.Module):
         self.hidden_size = hidden_size
         self.weight_ih = Parameter(torch.randn(4 * hidden_size, input_size))
         self.weight_hh = Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        self.bias_ih = Parameter(torch.zeros(4 * hidden_size))
+        self.bias_hh = Parameter(torch.zeros(4 * hidden_size))
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -59,13 +59,13 @@ class CustomLSTMCell(nn.Module):
         super(CustomLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.weight_ih = Parameter(torch.randn(3 * hidden_size, input_size))
-        self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
+        self.weight_ih = Parameter(torch.randn(input_size + hidden_size, 3 * hidden_size))
+        #self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
         self.bias_ih = Parameter(torch.randn(3 * hidden_size))
-        self.bias_hh = Parameter(torch.randn(3 * hidden_size))
+        #self.bias_hh = Parameter(torch.randn(3 * hidden_size))
 
-        self.weight_ih.weight = self.weights_init(self.weight_ih.shape)
-        self.weight_hh.weight = self.weights_init(self.weight_hh.shape)
+        self.weight_ih.weight = self.weights_init_cat(self.weight_ih.shape)
+        #self.weight_hh.weight = self.weights_init(self.weight_hh.shape)
 
     def forward(self, input, state, dropout_mask):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -73,8 +73,7 @@ class CustomLSTMCell(nn.Module):
 
         hx *= dropout_mask
 
-        gates = (torch.mm(input, self.weight_ih.t()) + self.bias_ih +
-                 torch.mm(hx, self.weight_hh.t()) + self.bias_hh)
+        gates = torch.mm(torch.cat((input, hx), 1), self.weight_ih) + self.bias_ih
         i, j, o = gates.chunk(3, 1)
 
         i = torch.sigmoid(i)
@@ -83,14 +82,17 @@ class CustomLSTMCell(nn.Module):
 
         return new_h, (new_h, new_cx)
 
-    def weights_init(self, shape):
-        M1 = torch.randn(shape[0], shape[0], dtype=torch.float32)
-        M2 = torch.randn(shape[1], shape[1], dtype=torch.float32)
+    def weights_init_cat(self, shape):
+        return torch.cat([self.weights_init(shape[0], shape[1]//3) for i in range(3)], 1)
+
+    def weights_init(self, shapex, shapey):
+        M1 = torch.randn(shapex, shapey, dtype=torch.float32)
+        M2 = torch.randn(shapex, shapey, dtype=torch.float32)
         Q1, R1 = torch.qr(M1)
         Q2, R2 = torch.qr(M2)
         Q1 = Q1 * torch.sign(torch.diag(R1))
         Q2 = Q2 * torch.sign(torch.diag(R2))
-        n_min = min(shape[0], shape[1])
+        n_min = min(shapex, shapey)
         params = torch.mm(Q1[:, :n_min], Q2[:n_min, :])
         return params
 
