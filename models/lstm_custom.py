@@ -33,8 +33,8 @@ class LSTMCell(nn.Module):
         self.hidden_size = hidden_size
         self.weight_ih = Parameter(torch.randn(4 * hidden_size, input_size))
         self.weight_hh = Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        self.bias_ih = Parameter(torch.zeros(4 * hidden_size))
+        self.bias_hh = Parameter(torch.zeros(4 * hidden_size))
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]

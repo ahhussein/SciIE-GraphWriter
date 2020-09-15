@@ -40,8 +40,8 @@ def main():
 
     dataset = DocumentDataset(config=config, is_eval=True)
 
-    vertex_model_name = 'vertex_embeddings__100'
-    model_eval_name = 'model__96.loss-0.0.lr-0.00045466485573132946'
+    vertex_model_name = 'vertex_embeddings__99'
+    model_eval_name = 'model__99.loss-0.0.lr-0.0004533022247040378'
 
     vertex_embeddings = VertexEmbeddings(config, dataset)
 
