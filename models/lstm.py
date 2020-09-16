@@ -11,12 +11,12 @@ class LSTMContextualize(nn.Module):
 
         self.lstm = BidirLSTMLayer(
             CustomLSTMCell,
-            1 - self.config['lstm_dropout_rate'],
+            self.config['lstm_dropout_rate'],
             config['embedding_size_contactenated'],
             config['contextualization_size']
         )
 
-        self.dropout = nn.Dropout(1 - self.config['lstm_dropout_rate'])
+        self.dropout = nn.Dropout(self.config['lstm_dropout_rate'])
 
         # self.ffnn = nn.Linear(
         #     config['contextualization_size'] * 2,

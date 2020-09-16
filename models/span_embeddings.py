@@ -20,7 +20,7 @@ class SpanEmbeddings(nn.Module):
         self.embeddings = nn.Parameter(emb)
 
         self.softmax = nn.Softmax(1)
-        self.dropout = nn.Dropout(1- self.config['dropout_rate'])
+        self.dropout = nn.Dropout(self.config['dropout_rate'])
         self.ffnn = nn.Linear(
             config['contextualization_size'] * 2,
             self.config['num_attention_heads']
@@ -118,7 +118,7 @@ class UnaryScores(nn.Module):
             1
         )
 
-        self.dropout = 1 - self.config['dropout_rate']
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -168,7 +168,7 @@ class RelScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = nn.Dropout(self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -256,7 +256,7 @@ class NerScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = nn.Dropout(self.config['dropout_rate'])
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
