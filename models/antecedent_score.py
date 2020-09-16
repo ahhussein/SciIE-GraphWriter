@@ -31,6 +31,9 @@ class AntecedentScore(nn.Module):
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
+        torch.nn.init.uniform_(self.input.bias)
+        torch.nn.init.uniform_(self.hidden.bias)
+        torch.nn.init.uniform_(self.output.bias)
 
 
     def forward(self, top_span_emb, top_span_mention_scores, antecedents):
