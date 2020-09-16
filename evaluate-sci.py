@@ -61,13 +61,11 @@ def main(args):
 
     while True:
         models = glob.glob(f'{log_dir}/model__*')
-        emb_models = glob.glob(f'{log_dir}/vertex_*')
 
         def extract_model_key(x):
             return int(re.findall(r'\d+', x)[0])
 
         models = sorted(models, key=extract_model_key)
-        emb_models = sorted(emb_models, key=extract_model_key)
 
         for i, model_name in enumerate(models):
             if "max" in model_name:
