@@ -72,7 +72,7 @@ class CustomLSTMCell(nn.Module):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
 
-        hx *= dropout_mask
+        hx = hx * dropout_mask
 
         gates = torch.mm(torch.cat((input, hx), 1), self.weight_ih) + self.bias_ih
         i, j, o = gates.chunk(3, 1)

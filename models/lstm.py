@@ -18,6 +18,12 @@ class LSTMContextualize(nn.Module):
 
         self.dropout = nn.Dropout(self.config['lstm_dropout_rate'])
 
+        states = [torch.empty(1, self.config['contextualization_size']) for i in range(4)]
+
+        [torch.nn.init.xavier_uniform_(state) for state in states]
+
+        self.states = nn.ParameterList([nn.Parameter(i) for i in states])
+
         # self.ffnn = nn.Linear(
         #     config['contextualization_size'] * 2,
         #     config['contextualization_size'] * 2
@@ -26,25 +32,15 @@ class LSTMContextualize(nn.Module):
         # torch.nn.init.xavier_uniform_(self.ffnn.weight)
 
 
-    def forward(self, context_emb, state = None):
+    def forward(self, context_emb):
         #current_inputs = context_emb
         #for i, lstm in enumerate(self.lstms):
         context_emb = context_emb.transpose(0,1)
 
-        if not state:
-
-            states = [torch.empty(
-                    context_emb.shape[1],
-                    self.config['contextualization_size']
-                ) for i in range(4)]
-
-
-            [torch.nn.init.xavier_uniform_(state) for state in states]
-
-            states = [LSTMState(
-                states[i],
-                states[2+i]
-            ) for i in range(2)]
+        states = [LSTMState(
+            self.states[i].repeat(context_emb.shape[1], 1),
+            self.states[2+i].repeat(context_emb.shape[1], 1)
+        ) for i in range(2)]
 
         out, out_state = self.lstm(context_emb, states)
 
