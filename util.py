@@ -556,3 +556,6 @@ def index(a_list, value):
 
     return idx[0].item()
 
+def golort_factor(fan_in):
+    return math.sqrt(6/(2 * fan_in))
+

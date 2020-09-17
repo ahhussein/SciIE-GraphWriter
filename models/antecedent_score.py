@@ -8,7 +8,7 @@ class AntecedentScore(nn.Module):
         super().__init__()
         self.config = config
         emb = torch.empty(10, self.config["feature_size"])
-        nn.init.uniform_(emb)
+        nn.init.xavier_uniform_(emb)
         self.antecedent_distance_emb = nn.Parameter(emb)
 
         self.input = nn.Linear(
@@ -30,9 +30,9 @@ class AntecedentScore(nn.Module):
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
-        torch.nn.init.uniform_(self.input.bias)
-        torch.nn.init.uniform_(self.hidden.bias)
-        torch.nn.init.uniform_(self.output.bias)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
 
 
     def forward(self, top_span_emb, top_span_mention_scores, antecedents):

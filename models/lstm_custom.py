@@ -8,7 +8,7 @@ from typing import List, Tuple
 from torch import Tensor
 import numbers
 import torch.nn.functional as nnf
-
+import util
 '''
 Some helper classes for writing custom TorchScript LSTMs.
 
@@ -62,7 +62,8 @@ class CustomLSTMCell(nn.Module):
         self.weight_ih = Parameter(torch.randn(input_size + hidden_size, 3 * hidden_size))
         #self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
         self.bias_ih = Parameter(torch.randn(3 * hidden_size))
-        torch.nn.init.uniform_(self.bias_ih)
+        torch.nn.init.uniform_(self.bias_ih, -1 * util.golort_factor(self.bias_ih.shape[0]), util.golort_factor(self.bias_ih.shape[0]))
+
         #self.bias_hh = Parameter(torch.randn(3 * hidden_size))
 
         self.weight_ih.weight = self.weights_init_cat(self.weight_ih.shape)

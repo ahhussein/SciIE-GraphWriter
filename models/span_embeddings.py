@@ -27,7 +27,7 @@ class SpanEmbeddings(nn.Module):
             self.config['num_attention_heads']
         )
         torch.nn.init.xavier_uniform_(self.ffnn.weight)
-        torch.nn.init.uniform_(self.ffnn.bias)
+        torch.nn.init.uniform_(self.ffnn.bias, -1 * util.golort_factor(self.ffnn.bias.shape[0]), util.golort_factor(self.ffnn.bias.shape[0]))
 
     def forward(self, head_emb, context_outputs, span_starts, span_ends):
         """Compute span representation shared across tasks.
@@ -124,9 +124,10 @@ class UnaryScores(nn.Module):
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
-        torch.nn.init.uniform_(self.input.bias)
-        torch.nn.init.uniform_(self.hidden.bias)
-        torch.nn.init.uniform_(self.output.bias)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
+
 
     def forward(self, candidate_span_emb):
         # candidate_span_emb = [num-candidates, emb]
@@ -175,9 +176,9 @@ class RelScores(nn.Module):
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
-        torch.nn.init.uniform_(self.input.bias)
-        torch.nn.init.uniform_(self.hidden.bias)
-        torch.nn.init.uniform_(self.output.bias)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
 
     def forward(self, entity_emb, entity_scores, rel_labels, num_predicted_entities):
         num_sentences = entity_emb.shape[0]
@@ -265,9 +266,10 @@ class NerScores(nn.Module):
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
-        torch.nn.init.uniform_(self.input.bias)
-        torch.nn.init.uniform_(self.hidden.bias)
-        torch.nn.init.uniform_(self.output.bias)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
+
 
     def forward(self, candidate_span_emb, flat_candidate_entity_scores,
                 candidate_span_ids, spans_log_mask,

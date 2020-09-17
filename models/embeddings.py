@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 import torch.nn.functional as nnf
-
+import util
 class CharEmbeddings(nn.Module):
     def __init__(self, config, data):
         super().__init__()
@@ -44,7 +44,8 @@ class CharEmbeddings(nn.Module):
     def _init_weights(self, m):
         if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
             nn.init.xavier_uniform_(m.weight)
-            nn.init.uniform_(m.bias)
+            torch.nn.init.uniform_(m.bias, -1 * util.golort_factor(m.bias.shape[0]), util.golort_factor(m.bias.shape[0]))
+
 
 class ElmoEmbeddings(nn.Module):
     def __init__(self, config, data):
