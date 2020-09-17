@@ -1,6 +1,7 @@
 from torch import nn, dtype
 import torch
 import util
+import torch.nn.functional as nnf
 
 class AntecedentScore(nn.Module):
     def __init__(self, config):
@@ -25,9 +26,7 @@ class AntecedentScore(nn.Module):
             1
         )
 
-        self.relu = nn.ReLU()
-
-        self.dropout = nn.Dropout(self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -46,11 +45,10 @@ class AntecedentScore(nn.Module):
 
             antecedent_distance_buckets = util.bucket_distance(antecedent_distance)  # [k, max_ant]
 
-            # TODO-Important variable reuse with tf.variable_scope("features", reuse=reuse):
             antecedent_distance_emb = self.antecedent_distance_emb[antecedent_distance_buckets] # [k, max_ant, emb]
             feature_emb_list.append(antecedent_distance_emb)
 
-        feature_emb = self.dropout(torch.cat(feature_emb_list, 2)).to(self.config.device) # [k, max_ant, emb]
+        feature_emb = nnf.dropout(torch.cat(feature_emb_list, 2), self.dropout) # [k, max_ant, emb]
 
 
         # mentions are included in the mention_scores array since that array gives a score
@@ -64,16 +62,16 @@ class AntecedentScore(nn.Module):
 
         #with tf.variable_scope("antecedent_scores", reuse=reuse):
         # candidate_span_emb = [num-candidates, emb]
-        hidden1 = self.dropout(
-            self.relu(
+        hidden1 = nnf.dropout(
+            nnf.relu(
                 self.input(pair_emb)
-            )
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-            self.relu(
+        hidden2 = nnf.dropout(
+            nnf.relu(
                 self.hidden(hidden1)
-            )
+            ), self.dropout
         )
 
         antecedent_scores = self.output(hidden2) # [k, max_ant, 1]
