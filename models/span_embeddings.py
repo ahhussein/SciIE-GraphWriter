@@ -12,7 +12,8 @@ class SpanEmbeddings(nn.Module):
         # Embeddings for span widths
         self.max_width = self.config['max_arg_width']
 
-        self.max_width = self.config['max_arg_width']+5
+        # TODO uncomment for graph writer connection
+        #self.max_width = self.config['max_arg_width']+5
 
         emb = torch.empty(self.max_width, self.config['feature_size'])
 
@@ -163,8 +164,6 @@ class RelScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.relu = nn.ReLU()
-
         self.output = nn.Linear(
             self.config["ffnn_size"],
             num_labels - 1
@@ -172,7 +171,7 @@ class RelScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -194,16 +193,16 @@ class RelScores(nn.Module):
         pair_emb_size = pair_emb.shape[3]
         flat_pair_emb = pair_emb.view([num_sentences * num_entities * num_entities, pair_emb_size])
 
-        hidden1 = self.dropout(
-            self.relu(
+        hidden1 = nnf.dropout(
+            nnf.relu(
                 self.input(flat_pair_emb)
-            )
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-            self.relu(
+        hidden2 = nnf.dropout(
+            nnf.relu(
                 self.hidden(hidden1)
-            )
+            ), self.dropout
         )
 
         scores = self.output(hidden2)
@@ -229,6 +228,7 @@ class RelScores(nn.Module):
             &
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
+
 
 
         # TODO important ensure that loss functiion is correct replacement for tensorflow
@@ -259,11 +259,9 @@ class NerScores(nn.Module):
             num_labels - 1
         )
 
-        self.relu = nn.ReLU()
-
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
@@ -272,19 +270,19 @@ class NerScores(nn.Module):
         torch.nn.init.uniform_(self.output.bias)
 
     def forward(self, candidate_span_emb, flat_candidate_entity_scores,
-                candidate_span_ids, spans_log_mask, dummy_scores,
+                candidate_span_ids, spans_log_mask,
                 gold_ner_labels, candidate_mask
     ):
-        hidden1 = self.dropout(
-            self.relu(
+        hidden1 = nnf.dropout(
+            nnf.relu(
                 self.input(candidate_span_emb)
-            )
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-            self.relu(
+        hidden2 = nnf.dropout(
+            nnf.relu(
                 self.hidden(hidden1)
-            )
+            ), self.dropout
         )
 
         scores = self.output(hidden2)
@@ -296,6 +294,10 @@ class NerScores(nn.Module):
             flat_ner_scores += (
                     self.config["span_score_weight"] * flat_candidate_entity_scores.unsqueeze(1)
             )
+
+        # [num_sentences, max_num_candidates_per_sentence, 1]
+        dummy_scores = torch.zeros_like(candidate_span_ids, dtype=torch.float32).unsqueeze(2)
+
 
         # [num_sentences, max_num_candidates, num_labels-1]
         ner_scores = flat_ner_scores[candidate_span_ids] + spans_log_mask.unsqueeze(2)

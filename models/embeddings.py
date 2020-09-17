@@ -1,25 +1,24 @@
 from torch import nn
 import torch
+import torch.nn.functional as nnf
 
 class CharEmbeddings(nn.Module):
     def __init__(self, config, data):
         super().__init__()
         self.config = config
         self.data = data
-        self.cnns= []
-        for filter_width in self.config['filter_widths']:
-            self.cnns.append(
-                nn.Conv1d(
-                    self.config['char_embedding_size'],
-                    config['filter_size'],
-                    filter_width
-                )
-            )
+
+        self.cnns = nn.ModuleList(nn.Conv1d(
+            self.config['char_embedding_size'],
+            config['filter_size'],
+            filter_width
+        ) for filter_width in self.config['filter_widths'])
+
+        self.cnns.apply(self._init_weights)
 
         emb = torch.empty(data.dict_size, data.char_embedding_size)
 
         nn.init.xavier_uniform_(emb)
-        self.relu = nn.ReLU()  # [num_words, num_chars - filter_size, num_filters]
         self.embeddings = nn.Parameter(emb)
 
     def forward(self, char_index):
@@ -36,12 +35,16 @@ class CharEmbeddings(nn.Module):
         flattened_char_emb = torch.transpose(flattened_char_emb, 2, 1)
         outputs = []
         for cnn in self.cnns:
-            conv, indices = torch.max(self.relu(cnn(flattened_char_emb)), 2)
+            conv, indices = torch.max(nnf.relu(cnn(flattened_char_emb)), 2)
             outputs.append(conv)
         concatenated = torch.cat(outputs, 1) #[num-words, num-filters * len(filter-sizes)]
 
         return concatenated.view(num_sentences, max_sentence_length, -1) # [num_sentences, max_sentence_length, emb]
 
+    def _init_weights(self, m):
+        if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
+            nn.init.uniform_(m.bias)
 
 class ElmoEmbeddings(nn.Module):
     def __init__(self, config, data):
@@ -81,7 +84,7 @@ class Embeddings(nn.Module):
         self.config = config
         self.char_embeddings = CharEmbeddings(config, data)
         self.elmo_embeddings = ElmoEmbeddings(config, data)
-        self.dropout = nn.Dropout(self.config['lexical_dropout_rate'])
+        self.dropout = self.config['lexical_dropout_rate']
 
     def forward(self, batch):
         # [num_sentences, max_sentence_length, emb-context]
@@ -103,8 +106,8 @@ class Embeddings(nn.Module):
         context_emb = torch.cat(context_emb_list, 2) # [num_sentences, max_sentence_length, emb1]
         head_emb = torch.cat(head_emb_list, 2) # [num_sentences, max_sentence_length, emb2]
 
-        context_emb = self.dropout(context_emb)
-        head_emb = self.dropout(head_emb)
+        context_emb = nnf.dropout(context_emb, self.dropout)
+        head_emb = nnf.dropout(head_emb, self.dropout)
 
         return context_emb, head_emb, lm_weights, lm_scaling
 

@@ -240,7 +240,7 @@ class Model(nn.Module):
                 batch.rel_e1_starts, batch.rel_e1_ends, batch.rel_e2_starts, batch.rel_e2_ends,
                 batch.rel_labels, batch.rel_len
             )  # [num_sentences, max_num_ents, max_num_ents]
-
+            self.log('info', f"non zero labels: {rel_labels.nonzero()}")
             # TODO rel mask is needed here to avoid the padding
 
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
@@ -336,9 +336,6 @@ class Model(nn.Module):
         else:
             coref_loss = 0
 
-        # [num_sentences, max_num_candidates_per_sentence, 1]
-        dummy_scores = torch.zeros_like(candidate_span_ids, dtype=torch.float32).unsqueeze(2)
-
         if self.config["ner_weight"] > 0:
             # [num_sentences, max_num_candidates, num_labels-1]
             ner_scores, ner_loss = self.ner_scores(
@@ -346,7 +343,6 @@ class Model(nn.Module):
                 flat_candidate_entity_scores,
                 candidate_span_ids,
                 spans_log_mask,
-                dummy_scores,
                 gold_ner_labels,
                 candidate_mask
             )
