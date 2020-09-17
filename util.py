@@ -62,14 +62,10 @@ def span_prune(
 
     output_span_indices = torch.ones(num_sentences, max_num_output_spans)
 
-    if logger:
-        logger.info(f"Sorting scores shape - {span_scores.shape} -- Started")
 
     # Sort spans by score
     sorted_scores, sorted_input_span_indices = torch.sort(span_scores, descending=True)
 
-    if logger:
-        logger.info("Sorting scores -- Ended")
 
     for l in range(num_sentences):
         top_span_indices = []
@@ -78,8 +74,6 @@ def span_prune(
         current_span_index = 0
         num_selected_spans = 0
 
-        if logger:
-            logger.info(f"Sorting loop -- sentence {l+1} out of {num_sentences}")
 
         while (
             # selected spans are not equal to topk for that sent
@@ -154,9 +148,6 @@ def span_prune(
         if last_selected >= 0:
             for i in range(num_selected_spans, max_num_output_spans):
                 output_span_indices[l][i]= output_span_indices[l][last_selected]
-
-        if logger:
-            logger.info(f"sentence {l+1} out of {num_sentences} - Completed")
 
 
     return output_span_indices

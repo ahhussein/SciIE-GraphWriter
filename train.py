@@ -162,12 +162,6 @@ def main(args):
 
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
         writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
-        writer.add_histogram('char_emb', vertex_embeddings.embeddings.char_embeddings.embeddings, epoch)
-        writer.add_histogram('entity_unary_scores', predict_dict['candidate_entity_scores'], epoch)
-        writer.add_histogram('candidate_mention_scores', predict_dict['candidate_mention_scores'], epoch)
-        writer.add_histogram('ant_scores', predict_dict['antecedent_scores'], epoch)
-        writer.add_histogram('rel_scores_2d', predict_dict['rel_scores'], epoch)
-        writer.add_histogram('ner_scores', predict_dict['ner_scores'], epoch)
 
         scheduler.step()
 
@@ -410,7 +404,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             #     print(f"min: {max}")
 
             if param.grad is not None:
-                writer.add_histogram(name, param.clone().detach().cpu().numpy(), step, bins=20)
+                writer.add_histogram('params/' + name, param.clone().detach().cpu().numpy(), step, bins=20)
                 writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)
 
 
