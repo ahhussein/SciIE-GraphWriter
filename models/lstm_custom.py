@@ -103,6 +103,8 @@ class LSTMLayer(nn.Module):
         super(LSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
         self.dropout = dropout
+        # TODO
+        self.dropout = 0
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -122,6 +124,8 @@ class ReverseLSTMLayer(nn.Module):
         super(ReverseLSTMLayer, self).__init__()
         self.cell = cell(*cell_args)
         self.dropout = dropout
+        # TODO
+        self.dropout = 0
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
