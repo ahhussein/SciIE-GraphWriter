@@ -1,4 +1,3 @@
-
 import glob
 import sys
 import os
@@ -11,10 +10,12 @@ from GraphWriter.pargs import pargs, dynArgs
 from torchtext import data
 import logging
 from models.vertex_embeddings import VertexEmbeddings
+from torch.utils.tensorboard import SummaryWriter
 import time
 import shutil
 import re
 
+global_counter = 0
 logger = logging.getLogger('myapp')
 hdlr = logging.FileHandler('eval-sci.log')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -57,6 +58,7 @@ def main(args):
     log_dir = config["log_dir"]
 
     max_f1 = 0
+    writer = SummaryWriter(log_dir=config['log_dir'])
     best_task_f1 = {}
 
     while True:
@@ -75,6 +77,7 @@ def main(args):
             model.load_state_dict(torch.load(tmp_checkpoint_path))
 
             eval_summary, f1, task_to_f1 = evaluate_for_mode(model, dataset, evaluator)
+
 
             if f1 > max_f1:
                 max_f1 = f1
@@ -123,6 +126,11 @@ def evaluate_for_mode(model, dataset, evaluator):
 
     return evaluator.summarize_results()
 
+def summarize(writer, summ_dict):
+    global global_counter
+    for key, value in summ_dict.items():
+        writer.add_scaler(key, value, step=global_counter)
+        global_counter+=1
 
 if __name__ == "__main__":
     args = pargs()
