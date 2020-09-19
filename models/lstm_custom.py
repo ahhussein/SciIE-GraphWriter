@@ -89,8 +89,8 @@ class CustomLSTMCell(nn.Module):
         return torch.cat([self.weights_init(shape[0], shape[1]//3) for i in range(3)], 1)
 
     def weights_init(self, shapex, shapey):
-        M1 = torch.randn(shapex, shapey, dtype=torch.float32)
-        M2 = torch.randn(shapex, shapey, dtype=torch.float32)
+        M1 = torch.randn(shapex, shapex, dtype=torch.float32)
+        M2 = torch.randn(shapey, shapey, dtype=torch.float32)
         Q1, R1 = torch.qr(M1)
         Q2, R2 = torch.qr(M2)
         Q1 = Q1 * torch.sign(torch.diag(R1))

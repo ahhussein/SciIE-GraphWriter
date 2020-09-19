@@ -38,13 +38,10 @@ class Evaluator:
 
             sentences = doc_example["sentences"]
 
-
-            self.log("info", "Decoding")
             decoded_predictions = inference_utils.mtl_decode(
                 sentences, predictions[doc_key], self.dataset.ner_labels_inv,
                 self.dataset.rel_labels_inv, self.config
             )
-            self.log("info", "Decoding - Completed")
 
 
             # Relation extraction.
