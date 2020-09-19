@@ -77,8 +77,7 @@ def main(args):
             model.load_state_dict(torch.load(tmp_checkpoint_path))
 
             eval_summary, f1, task_to_f1 = evaluate_for_mode(model, dataset, evaluator)
-
-
+            summarize(writer, eval_summary)
             if f1 > max_f1:
                 max_f1 = f1
 
