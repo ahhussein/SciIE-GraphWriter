@@ -143,7 +143,7 @@ class Evaluator:
                 for t, v in list(zip(tags, evaluator.metrics())):
                     results_to_print.append("{:<10}: {:.4f}".format(t, v))
                     summary_dict[t] = v
-                print(", ".join(results_to_print))
+                self.log("info",", ".join(results_to_print))
 
         if self.config["ner_weight"] > 0:
             ner_precision, ner_recall, ner_f1, ul_ner_prec, ul_ner_recall, ul_ner_f1, ner_label_mat = (
@@ -162,11 +162,11 @@ class Evaluator:
         if self.config["coref_weight"] > 0:
             p, r, f = self.coref_evaluator.get_prf()
             summary_dict["Average Coref F1 (py)"] = f
-            print("Average F1 (py): {:.2f}%".format(f * 100))
+            self.log("info", "Average F1 (py): {:.2f}%".format(f * 100))
             summary_dict["Average Coref precision (py)"] = p
-            print("Average precision (py): {:.2f}%".format(p * 100))
+            self.log("info","Average precision (py): {:.2f}%".format(p * 100))
             summary_dict["Average Coref recall (py)"] = r
-            print("Average recall (py): {:.2f}%".format(r * 100))
+            self.log("info","Average recall (py): {:.2f}%".format(r * 100))
 
             task_to_f1["coref"] = f * 100  # coref_conll_f1
             for k, evaluator in sorted(self.mention_evaluators.items(), key=operator.itemgetter(0)):
@@ -175,12 +175,12 @@ class Evaluator:
                 for t, v in list(zip(tags, evaluator.metrics())):
                     results_to_print.append("{:<10}: {:.4f}".format(t, v))
                     summary_dict[t] = v
-                print(", ".join(results_to_print))
+                self.log("info",", ".join(results_to_print))
 
         summary_dict["Dev Loss"] = self.total_loss / len(self.coref_eval_data)
 
-        print("Decoding took {}.".format(str(datetime.timedelta(seconds=int(elapsed_time)))))
-        print(
+        self.log("info","Decoding took {}.".format(str(datetime.timedelta(seconds=int(elapsed_time)))))
+        self.log("info",
             "Decoding speed: {}/document, or {}/sentence.".format(
                 str(datetime.timedelta(seconds=int(elapsed_time / len(self.coref_eval_data)))),
                 str(datetime.timedelta(seconds=int(elapsed_time / len(self.eval_data))))
@@ -189,7 +189,7 @@ class Evaluator:
 
         metric_names = self.config["main_metrics"].split("_")
         main_metric = sum([task_to_f1[t] for t in metric_names]) / len(metric_names)
-        print("Combined metric ({}): {}".format(self.config["main_metrics"], main_metric))
+        self.log("info","Combined metric ({}): {}".format(self.config["main_metrics"], main_metric))
 
         return summary_dict, main_metric, task_to_f1
 

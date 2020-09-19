@@ -63,11 +63,10 @@ class CustomLSTMCell(nn.Module):
         #self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
         self.bias_ih = Parameter(torch.randn(3 * hidden_size))
         torch.nn.init.uniform_(self.bias_ih, -1 * util.golort_factor(self.bias_ih.shape[0]), util.golort_factor(self.bias_ih.shape[0]))
-        torch.nn.init.xavier_uniform(self.weight_ih)
 
         #self.bias_hh = Parameter(torch.randn(3 * hidden_size))
 
-        #self.weight_ih.weight = self.weights_init_cat(self.weight_ih.shape)
+        self.weight_ih.weight = self.weights_init_cat(self.weight_ih.shape)
         #self.weight_hh.weight = self.weights_init(self.weight_hh.shape)
 
     def forward(self, input, state, dropout_mask):
