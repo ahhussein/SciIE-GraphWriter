@@ -128,7 +128,7 @@ def evaluate_for_mode(model, dataset, evaluator):
 def summarize(writer, summ_dict):
     global global_counter
     for key, value in summ_dict.items():
-        writer.add_scaler(key, value, step=global_counter)
+        writer.add_scalar(key, value, step=global_counter)
         global_counter+=1
 
 if __name__ == "__main__":
