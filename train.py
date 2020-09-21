@@ -144,20 +144,20 @@ def main(args):
             False
         )
 
-        val_loss, val_sci_loss, val_gr_loss = evaluate(
-            model,
-            graph_model,
-            dataset_wrapper,
-            val_iter,
-            args.device,
-            config,
-            False,
-            True,
-            False
-        )
+        #val_loss, val_sci_loss, val_gr_loss = evaluate(
+        #    model,
+        #    graph_model,
+        #    dataset_wrapper,
+        #    val_iter,
+        #    args.device,
+        #    config,
+        #    False,
+        #    True,
+        #    False
+        #)
 
         logger.info(f"epoch Sci: {epoch + 1} - loss: {sci_loss}")
-        logger.info(f"epoch Sci: {epoch + 1} - VAL loss: {val_sci_loss}")
+        #logger.info(f"epoch Sci: {epoch + 1} - VAL loss: {val_sci_loss}")
 
         logger.info("Saving models")
 
@@ -167,7 +167,7 @@ def main(args):
         )
 
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
-        writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
+        #writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
 
         scheduler.step()
 
