@@ -12,7 +12,7 @@ class AntecedentScore(nn.Module):
         self.antecedent_distance_emb = nn.Parameter(emb)
 
         self.input = nn.Linear(
-            3830, #TODO
+            1520, #TODO
             self.config["ffnn_size"]
         )
 

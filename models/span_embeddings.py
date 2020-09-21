@@ -106,7 +106,7 @@ class UnaryScores(nn.Module):
         super().__init__()
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 
@@ -156,7 +156,7 @@ class RelScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270 * 3, #TODO
+            500 * 3, #TODO
             self.config["ffnn_size"]
         )
 
@@ -246,7 +246,7 @@ class NerScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 

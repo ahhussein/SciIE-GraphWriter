@@ -13,8 +13,8 @@ class VertexEmbeddings(nn.Module):
         self.lstm = LSTMContextualize(config, data)
         self.span_embeddings = SpanEmbeddings(config, data)
         self.config = config
-        #self.emb_projection = nn.Linear(1270, 500)
-        #torch.nn.init.xavier_uniform_(self.emb_projection.weight)
+        self.emb_projection = nn.Linear(1270, 500)
+        torch.nn.init.xavier_uniform_(self.emb_projection.weight)
         self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 1270)
 
     def forward(self, batch, generate_candiadtes=True):
@@ -82,7 +82,7 @@ class VertexEmbeddings(nn.Module):
         )
         # TODO check projection important for graph to work
         # Project entity embs to lower space
-        # candidate_span_emb = self.emb_projection(candidate_span_emb)
+        candidate_span_emb = self.emb_projection(candidate_span_emb)
 
         return (
             candidate_starts,
