@@ -174,12 +174,12 @@ def main(args):
     # Train the graph erc
     offset = 0
     for epoch in range(config['train_graph_for']):
-        # TODO Load pretrained model
+
         max_model_checkpoint = os.path.join(config["log_dir"], "graph_model.max")
         if os.path.exists(max_model_checkpoint):
             graph_model.load_state_dict(torch.load(max_model_checkpoint))
             logger.info("Graph Model Loaded")
-            
+
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
@@ -215,16 +215,10 @@ def main(args):
 
         logger.info("Saving models")
 
-        if epoch % 1 == 0:
-            torch.save(
-                graph_model.state_dict(),
-                f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
-            )
-
-            torch.save(
-                vertex_embeddings.state_dict(),
-                f"{config['log_dir']}/vertex_embeddings_graph_{epoch + 1}"
-            )
+        torch.save(
+            graph_model.state_dict(),
+            f"{config['log_dir']}/graph_model__{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
+        )
 
         writer.add_scalar('train/gr_loss', gr_loss, epoch)
         writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
@@ -295,11 +289,6 @@ def main(args):
             f"{config['log_dir']}/graph_model__joint_{epoch + 1}.loss-{loss}.lr-{str(graph_opt.param_groups[0]['lr'])}"
         )
 
-        torch.save(
-            vertex_embeddings.state_dict(),
-            f"{config['log_dir']}/vertex_embeddings__joint_{epoch + 1}"
-        )
-
         writer.add_scalar('train/loss', loss, epoch)
         writer.add_scalar('train/gr_loss', gr_loss, epoch)
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
@@ -331,7 +320,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 predict_dict, sci_loss = model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
-                    logger.error('| WARNING: ran out of memory, skipping sci batch')
+                    logger.error('| WARNING: ran out of memory, skipping SCI batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
                     logger.info(f"Batch key: {batch.doc_key}")
                     for p in model.parameters():
@@ -353,7 +342,7 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
                 p, planlogits = graph_model(batch)
             except RuntimeError as e:
                 if 'out of memory' in str(e):
-                    logger.error('| WARNING: ran out of memory, skipping graph batch')
+                    logger.error('| WARNING: ran out of memory, skipping GRAPH batch')
                     logger.info(f"Batch sizes: {batch.text_len}")
                     logger.info(f"Batch key: {batch.doc_key}")
 
@@ -387,9 +376,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             sci_loss.backward()
             sc_loss += sci_loss.item() * len(batch.doc_len)
 
-        #plot_grad_flow(graph_model.named_parameters(), writer)
-
-
         # Summarize results
         step = count + offset
 
@@ -406,15 +392,6 @@ def train(model, graph_model, dataset, optimizer, writer, data_iter, device, con
             nn.utils.clip_grad_norm_(graph_model.parameters(), args.clip)
 
         for name, param in model.named_parameters():
-            # min = torch.min(param)
-            # max = torch.max(param)
-
-            # if abs(min) < 1e-3 or abs(min) > 1e3:
-            #     print(f"min: {min}")
-            #
-            # if abs(max) < 1e-3 or abs(max) > 1e3:
-            #     print(f"min: {max}")
-
             if param.grad is not None:
                 writer.add_histogram('params/' + name, param.clone().detach().cpu().numpy(), step, bins=20)
                 writer.add_histogram('grads/' + name, param.grad.clone().detach().cpu().numpy(), step, bins=20)

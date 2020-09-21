@@ -145,8 +145,6 @@ class Model(nn.Module):
             # Crossing is not allowed which means it will always returns spans that doesn't overlap with each other
             assert not torch.isnan(candidate_mention_scores).any()
 
-
-
             top_mention_indices = util.span_prune(
                 candidate_mention_scores.unsqueeze(0),
                 flat_candidate_starts.unsqueeze(0),
