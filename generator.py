@@ -128,7 +128,7 @@ if __name__=="__main__":
   graph_model.eval()
 
   for i, model_name in enumerate(models):
-    graph_cpt = torch.load(f"{config['log_dir']}/{model_name}", map_location='cuda:0')
+    graph_cpt = torch.load(f"{model_name}", map_location='cuda:0')
     graph_model.load_state_dict(graph_cpt)
 
     preds, gold = test(dataset_wrapper ,graph_model, model_name)
