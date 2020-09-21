@@ -123,6 +123,12 @@ def main(args):
 
     # Train the sci erc
     for epoch in range(config['train_sci_for']):
+        # TODO Load pretrained model
+        max_model_checkpoint = os.path.join(config["log_dir"], "model.max")
+        if os.path.exists(max_model_checkpoint):
+            model.load_state_dict(torch.load(max_model_checkpoint))
+            logger.info("Scierc Model Loaded")
+
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
@@ -168,7 +174,12 @@ def main(args):
     # Train the graph erc
     offset = 0
     for epoch in range(config['train_graph_for']):
-
+        # TODO Load pretrained model
+        max_model_checkpoint = os.path.join(config["log_dir"], "graph_model.max")
+        if os.path.exists(max_model_checkpoint):
+            graph_model.load_state_dict(torch.load(max_model_checkpoint))
+            logger.info("Graph Model Loaded")
+            
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
