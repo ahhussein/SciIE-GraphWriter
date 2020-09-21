@@ -10,6 +10,7 @@ from torch import nn
 import glob, sys
 from eval import Evaluate
 import logging
+import ntpath
 #import utils.eval as evalMetrics
 
 logger = logging.getLogger('myapp')
@@ -105,6 +106,9 @@ if __name__=="__main__":
   args = pargs()
   args.eval = True
   config = util.get_config("experiments.conf")[exp_name]
+  config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], exp_name))
+  models = glob.glob(f'{config["log_dir"]}/graph_model*')
+
   dataset_wrapper = DocumentDataset(config, args, is_eval=True)
   args = dynArgs(args)
 
@@ -131,7 +135,7 @@ if __name__=="__main__":
     graph_cpt = torch.load(f"{model_name}", map_location='cuda:0')
     graph_model.load_state_dict(graph_cpt)
 
-    preds, gold = test(dataset_wrapper ,graph_model, model_name)
+    preds, gold = test(dataset_wrapper ,graph_model, ntpath.basename(model_name))
 
   graph_model.train()
 
