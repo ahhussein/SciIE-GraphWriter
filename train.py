@@ -123,7 +123,6 @@ def main(args):
 
     # Train the sci erc
     for epoch in range(config['train_sci_for']):
-        # TODO Load pretrained model
         max_model_checkpoint = os.path.join(config["log_dir"], "model.max")
         if os.path.exists(max_model_checkpoint):
             model.load_state_dict(torch.load(max_model_checkpoint))

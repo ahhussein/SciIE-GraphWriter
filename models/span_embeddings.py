@@ -12,8 +12,7 @@ class SpanEmbeddings(nn.Module):
         # Embeddings for span widths
         self.max_width = self.config['max_arg_width']
 
-        # TODO uncomment for graph writer connection
-        #self.max_width = self.config['max_arg_width']+5
+        self.max_width = self.config['max_arg_width']+5
 
         emb = torch.empty(self.max_width, self.config['feature_size'])
 
@@ -223,16 +222,12 @@ class RelScores(nn.Module):
         num_labels = rel_scores.shape[3]
         entities_mask = util.sequence_mask(num_predicted_entities, max_num_entities)  # [num_sentences, max_num_entities]
 
-        # TODO use for the embedding representation fo entities rel
         rel_loss_mask = (
             entities_mask.unsqueeze(2) # [num_sentences, max_num_entities, 1]
             &
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
 
-
-
-        # TODO important ensure that loss functiion is correct replacement for tensorflow
         # tf.nn.sparse_softmax_cross_entropy_with_logits
         loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
 
