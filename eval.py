@@ -66,12 +66,12 @@ class Evaluate(object):
         final_scores = self.score(ref, hypo)
         #"""
         # print out scores
-        print ('Bleu_1:\t', final_scores['Bleu_1'])
-        print ('Bleu_2:\t', final_scores['Bleu_2'])
-        print ('Bleu_3:\t', final_scores['Bleu_3'])
-        print ('Bleu_4:\t', final_scores['Bleu_4'])
-        print ('METEOR:\t', final_scores['METEOR'])
-        print ('ROUGE_L:', final_scores['ROUGE_L'])
+        # print ('Bleu_1:\t', final_scores['Bleu_1'])
+        # print ('Bleu_2:\t', final_scores['Bleu_2'])
+        # print ('Bleu_3:\t', final_scores['Bleu_3'])
+        # print ('Bleu_4:\t', final_scores['Bleu_4'])
+        # print ('METEOR:\t', final_scores['METEOR'])
+        # print ('ROUGE_L:', final_scores['ROUGE_L'])
         #print ('CIDEr:\t', final_scores['CIDEr'])
         # """
 
