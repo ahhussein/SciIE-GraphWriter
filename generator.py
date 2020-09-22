@@ -72,6 +72,8 @@ def test(ds, graph_model, model_name, epoch='cmdline'):
       #tf.write(ent+'\n')
       pf.write(gen.lower()+'\n')
       pfgt.write(gold.lower()+'\n')
+  pf.close()
+  pfgt.close()
   # get and report evaluation mertices
   with open(ofn) as f:
     cands = {'generated_description' + str(i): x.strip() for i, x in enumerate(f.readlines())}
@@ -84,7 +86,7 @@ def test(ds, graph_model, model_name, epoch='cmdline'):
   logger.info(f"Bleu_3:\t {final_scores['Bleu_3']}")
   logger.info(f"Bleu_4:\t {final_scores['Bleu_4']}")
   logger.info(f"ROUGE_L:\t {final_scores['ROUGE_L']}")
-  #logger.info('METEOR:\t', final_scores['METEOR'])
+  logger.info('METEOR:\t', final_scores['METEOR'])
   #logger.info('CIDEr:\t', final_scores['CIDEr'])
 
   return preds,golds
