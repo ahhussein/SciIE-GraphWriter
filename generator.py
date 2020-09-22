@@ -79,12 +79,12 @@ def test(ds, graph_model, model_name, epoch='cmdline'):
     refs = {'generated_description' + str(i): [x.strip()] for i, x in enumerate(f.readlines())}
   final_scores = evaluator.evaluate(live=True, cand=cands, ref=refs)
   logger.info(f"Results for model: {model_name}")
-  logger.info('Bleu_1:\t', final_scores['Bleu_1'])
-  logger.info('Bleu_2:\t', final_scores['Bleu_2'])
-  logger.info('Bleu_3:\t', final_scores['Bleu_3'])
-  logger.info('Bleu_4:\t', final_scores['Bleu_4'])
+  logger.info(f"Bleu_1:\t {final_scores['Bleu_1']}")
+  logger.info(f"Bleu_2:\t {final_scores['Bleu_2']}")
+  logger.info(f"Bleu_3:\t {final_scores['Bleu_3']}")
+  logger.info(f"Bleu_4:\t {final_scores['Bleu_4']}")
+  logger.info(f"ROUGE_L:\t {final_scores['ROUGE_L']}")
   #logger.info('METEOR:\t', final_scores['METEOR'])
-  logger.info('ROUGE_L:', final_scores['ROUGE_L'])
   #logger.info('CIDEr:\t', final_scores['CIDEr'])
 
   return preds,golds
