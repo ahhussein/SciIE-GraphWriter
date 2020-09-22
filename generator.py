@@ -72,20 +72,20 @@ def test(ds, graph_model, model_name, epoch='cmdline'):
       #tf.write(ent+'\n')
       pf.write(gen.lower()+'\n')
       pfgt.write(gold.lower()+'\n')
-    # get and report evaluation mertices
-    with open(ofn) as f:
-      cands = {'generated_description' + str(i): x.strip() for i, x in enumerate(f.readlines())}
-    with open(ofngt) as f:
-      refs = {'generated_description' + str(i): [x.strip()] for i, x in enumerate(f.readlines())}
-    final_scores = evaluator.evaluate(live=True, cand=cands, ref=refs)
-    logger.info(f"Results for model: {model_name}")
-    logger.info('Bleu_1:\t', final_scores['Bleu_1'])
-    logger.info('Bleu_2:\t', final_scores['Bleu_2'])
-    logger.info('Bleu_3:\t', final_scores['Bleu_3'])
-    logger.info('Bleu_4:\t', final_scores['Bleu_4'])
-    logger.info('METEOR:\t', final_scores['METEOR'])
-    logger.info('ROUGE_L:', final_scores['ROUGE_L'])
-    logger.info('CIDEr:\t', final_scores['CIDEr'])
+  # get and report evaluation mertices
+  with open(ofn) as f:
+    cands = {'generated_description' + str(i): x.strip() for i, x in enumerate(f.readlines())}
+  with open(ofngt) as f:
+    refs = {'generated_description' + str(i): [x.strip()] for i, x in enumerate(f.readlines())}
+  final_scores = evaluator.evaluate(live=True, cand=cands, ref=refs)
+  logger.info(f"Results for model: {model_name}")
+  logger.info('Bleu_1:\t', final_scores['Bleu_1'])
+  logger.info('Bleu_2:\t', final_scores['Bleu_2'])
+  logger.info('Bleu_3:\t', final_scores['Bleu_3'])
+  logger.info('Bleu_4:\t', final_scores['Bleu_4'])
+  #logger.info('METEOR:\t', final_scores['METEOR'])
+  logger.info('ROUGE_L:', final_scores['ROUGE_L'])
+  #logger.info('CIDEr:\t', final_scores['CIDEr'])
 
   return preds,golds
 
