@@ -13,7 +13,7 @@ def gelu(x):
 class Block(nn.Module):
   def __init__(self,args):
     super().__init__()
-    self.attn = MultiHeadAttention2(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
+    self.attn = MultiHeadAttention(args.hsz,args.hsz,args.hsz,h=4,dropout_p=args.drop)
     self.l1 = nn.Linear(args.hsz,args.hsz*4)
     self.l2 = nn.Linear(args.hsz*4,args.hsz)
     self.ln_1 = nn.LayerNorm(args.hsz)
@@ -64,6 +64,8 @@ class graph_encode(nn.Module):
     if self.args.entdetach:
       vents = torch.tensor(vents,requires_grad=False)
 
+
+
     glob = []
     graphs = []
     for i,adj in enumerate(adjs):
@@ -93,9 +95,16 @@ class graph_encode(nn.Module):
           #print(ngraph.size(),vgraph.size(),mask.size())
           vgraph = self.gat[j](vgraph.unsqueeze(1),ngraph,mask)
         else:
+          vgraphs = []
+
+
+          for k in range(vgraph.shape[0]):
+            vgraph_indv = self.gat[j](vgraph[k].unsqueeze(0), vgraph, adj[k])
+            vgraphs.append(vgraph_indv)
+          vgraph = torch.cat(vgraphs, 0)
           # Repeating N number of times bcause attention is n^2
-          ngraph = vgraph.repeat(N, 1).view(N, N, -1).clone().detach().requires_grad_(False)
-          vgraph = self.gat[j](vgraph.unsqueeze(1), ngraph, mask)
+          # ngraph = vgraph.repeat(N, 1).view(N, N, -1).clone().detach().requires_grad_(False)
+          # vgraph = self.gat[j](vgraph.unsqueeze(1), ngraph, mask)
 
       graphs.append(vgraph)
 

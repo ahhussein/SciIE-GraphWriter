@@ -132,7 +132,6 @@ def main(args):
     torch.autograd.set_detect_anomaly(True)
     torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    # Train the sci erc
     for epoch in range(config['train_sci_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
@@ -181,7 +180,7 @@ def main(args):
 
     for param in graph_model.vertex_embeddings.parameters():
         param.requires_grad = False
-        
+
     offset = 0
     for epoch in range(config['train_graph_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(
@@ -246,6 +245,10 @@ def main(args):
         repeat=False,
         train=False
     )
+
+    # Freeze the attention params
+    for param in graph_model.ge.parameters():
+        param.requires_grad = False
 
     for epoch in range(config['train_both_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(

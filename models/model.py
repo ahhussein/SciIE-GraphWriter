@@ -237,9 +237,8 @@ class Model(nn.Module):
                 batch.rel_e1_starts, batch.rel_e1_ends, batch.rel_e2_starts, batch.rel_e2_ends,
                 batch.rel_labels, batch.rel_len
             )  # [num_sentences, max_num_ents, max_num_ents]
-            self.log('info', f"non zero labels: {rel_labels.nonzero()}")
             # TODO rel mask is needed here to avoid the padding
-
+            self.log('info', f"non zero labels: {rel_labels.nonzero()}")
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,  # [num_sentences, max_num_ents, emb]
                 entity_scores,  # [num_sentences, max_num_ents]
@@ -575,7 +574,7 @@ class Model(nn.Module):
 
         span_boundries = {}
         for idx, span_idx in enumerate(top_span_indices_combined):
-            span_boundries[f"{span_starts[idx]}-{span_ends[idx]}"] = span_idx.item()
+            span_boundries[f"{span_starts[idx]}-{span_ends[idx]}"] = idx
 
         # Build dict start-end => index
         tgts_entities = [[] for i in range(len(batch.ner_len))]
