@@ -231,7 +231,8 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.bool):
     if maxlen is None:
         maxlen = lengths.max()
 
-    row_vector = torch.arange(0, maxlen).to(lengths.get_device())
+    #row_vector = torch.arange(0, maxlen).to(lengths.get_device())
+    row_vector = torch.arange(0, maxlen)
     matrix = torch.unsqueeze(lengths, dim=-1)
     mask = row_vector < matrix
     mask = mask.type(dtype)

@@ -70,12 +70,12 @@ class graph_encode(nn.Module):
     gents = torch.stack(gents,0)
     elens = torch.LongTensor(elens)
     emask = torch.arange(0,gents.size(1)).unsqueeze(0).repeat(gents.size(0),1).long()
-    emask = (emask <= elens.unsqueeze(1)).cuda()
+    emask = (emask <= elens.unsqueeze(1))
     rlens = [x.size(0) for x in grels]
     grels = [self.pad(x,max(rlens)) for x in grels]
     grels = torch.stack(grels,0)
     rlens = torch.LongTensor(rlens)
     rmask = torch.arange(0,grels.size(1)).unsqueeze(0).repeat(grels.size(0),1).long()
-    rmask = (rmask <= rlens.unsqueeze(1)).cuda()
+    rmask = (rmask <= rlens.unsqueeze(1))
     glob = torch.stack(glob,0)
     return (gents,emask),glob,(grels,rmask)

@@ -2,7 +2,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-tt = torch.cuda if torch.cuda.is_available() else torch
+#tt = torch.cuda if torch.cuda.is_available() else torch
+tt = torch
 
 class beam_obj():
   def __init__(self,initword,initscore,h,c,last):

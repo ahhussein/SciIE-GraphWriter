@@ -119,7 +119,7 @@ def main(args):
 
     offset = 0
     torch.autograd.set_detect_anomaly(True)
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    #torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
     # Train the sci erc
     for epoch in range(config['train_sci_for']):

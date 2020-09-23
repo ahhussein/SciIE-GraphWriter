@@ -163,7 +163,7 @@ class model(nn.Module):
   def maskFromList(self,size,l):
     # size[1] = max sample (e.g. sentence) length
     # size[0] = batch size
-    mask = torch.arange(0,size[1]).unsqueeze(0).repeat(size[0],1).long().cuda()
+    mask = torch.arange(0,size[1]).unsqueeze(0).repeat(size[0],1).long()
     mask = (mask <= l.unsqueeze(1))
     mask = mask==0
     return mask
@@ -233,7 +233,7 @@ class model(nn.Module):
     outputs = []
 
 
-    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok).cuda()
+    outp = torch.LongTensor(ents.size(0),1).fill_(self.starttok)
     beam = None
     for i in range(self.maxlen):
       op = self.emb_w_vertex(outp.clone(),b.nerd)

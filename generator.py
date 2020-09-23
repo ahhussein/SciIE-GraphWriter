@@ -53,7 +53,7 @@ def test(ds, graph_model, model_name, epoch='cmdline'):
   golds = []
 
   for b in test_iter:
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    #torch.set_default_tensor_type(torch.cuda.FloatTensor)
     with torch.no_grad():
       b = ds.fix_batch(b)
       '''
@@ -134,7 +134,7 @@ if __name__=="__main__":
   graph_model.eval()
 
   for i, model_name in enumerate(models):
-    graph_cpt = torch.load(f"{model_name}", map_location='cuda:0')
+    graph_cpt = torch.load(f"{model_name}")
     graph_model.load_state_dict(graph_cpt)
 
     preds, gold = test(dataset_wrapper ,graph_model, ntpath.basename(model_name))

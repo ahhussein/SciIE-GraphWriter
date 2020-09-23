@@ -27,7 +27,6 @@ class Meteor(object):
     def compute_score(self, gts, res):
         imgIds = sorted(list(gts.keys()))
         scores = []
-
         eval_line = 'EVAL'
         self.lock.acquire()
         for i in imgIds:
@@ -35,7 +34,7 @@ class Meteor(object):
 
             hypothesis_str = res[i][0].replace('|||', '').replace('  ', ' ')
             score_line = ' ||| '.join(('SCORE', ' ||| '.join(gts[i]), hypothesis_str))
-
+            score_line = score_line.replace('\n', '').replace('\r', '')
             # We obtained --> SCORE ||| reference 1 words ||| reference n words ||| hypothesis words
             self.meteor_p.stdin.write(score_line + '\n')
             stat = self.meteor_p.stdout.readline().strip()
