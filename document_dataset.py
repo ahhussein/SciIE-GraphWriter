@@ -519,7 +519,7 @@ class DocumentDataset():
         specials = "method material otherscientificterm metric task".split(" ")
         # The size of the tgt vocab will still be the size without these specials
         for x in specials:
-            for y in range(700):
+            for y in range(5000):
                 s = "<" + x + "_" + str(y) + ">"
                 # Change indices of those vocab
                 self.tgt.vocab.stoi[s] = len(self.tgt.vocab.itos) + y

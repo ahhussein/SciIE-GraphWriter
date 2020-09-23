@@ -98,11 +98,22 @@ def main(args):
     if model:
         sci_opt = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
         optimziers['sci'] = sci_opt
+
+        max_model_checkpoint = os.path.join(config["log_dir"], "model.max")
+        if os.path.exists(max_model_checkpoint):
+            model.load_state_dict(torch.load(max_model_checkpoint))
+            logger.info("Scierc Model Loaded")
+
     else:
         sci_opt = None
     if graph_model:
         graph_opt = torch.optim.SGD(graph_model.parameters(), lr=args.lr, momentum=0.9)
         optimziers['graph'] = graph_opt
+
+        max_model_checkpoint = os.path.join(config["log_dir"], "graph_model.max")
+        if os.path.exists(max_model_checkpoint):
+            graph_model.load_state_dict(torch.load(max_model_checkpoint))
+            logger.info("Graph Model Loaded")
     else:
         graph_opt = None
 
@@ -123,11 +134,6 @@ def main(args):
 
     # Train the sci erc
     for epoch in range(config['train_sci_for']):
-        max_model_checkpoint = os.path.join(config["log_dir"], "model.max")
-        if os.path.exists(max_model_checkpoint):
-            model.load_state_dict(torch.load(max_model_checkpoint))
-            logger.info("Scierc Model Loaded")
-
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
@@ -143,7 +149,7 @@ def main(args):
             False
         )
 
-        #val_loss, val_sci_loss, val_gr_loss = evaluate(
+        # val_loss, val_sci_loss, val_gr_loss = evaluate(
         #    model,
         #    graph_model,
         #    dataset_wrapper,
@@ -153,10 +159,10 @@ def main(args):
         #    False,
         #    True,
         #    False
-        #)
+        # )
 
         logger.info(f"epoch Sci: {epoch + 1} - loss: {sci_loss}")
-        #logger.info(f"epoch Sci: {epoch + 1} - VAL loss: {val_sci_loss}")
+        # logger.info(f"epoch Sci: {epoch + 1} - VAL loss: {val_sci_loss}")
 
         logger.info("Saving models")
 
@@ -166,19 +172,18 @@ def main(args):
         )
 
         writer.add_scalar('train/sci_loss', sci_loss, epoch)
-        #writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
+        # writer.add_scalar('val/sci_loss', val_sci_loss, epoch)
 
         scheduler.step()
 
     # Train the graph erc
+    # Freeze vertex embs
+
+    for param in graph_model.vertex_embeddings.parameters():
+        param.requires_grad = False
+        
     offset = 0
     for epoch in range(config['train_graph_for']):
-
-        max_model_checkpoint = os.path.join(config["log_dir"], "graph_model.max")
-        if os.path.exists(max_model_checkpoint):
-            graph_model.load_state_dict(torch.load(max_model_checkpoint))
-            logger.info("Graph Model Loaded")
-
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
             graph_model,
@@ -210,7 +215,7 @@ def main(args):
             update_lr(graph_opt, args, epoch)
 
         logger.info(f"epoch graph: {epoch + 1} - loss: {gr_loss}")
-        logger.info(f"epoch graph: {epoch + 1} - VAL loss: {val_gr_loss}")
+        logger.info(f"epoch graph: {epoch + 1} - VAL loss: {val_loss}")
 
         logger.info("Saving models")
 
@@ -220,7 +225,7 @@ def main(args):
         )
 
         writer.add_scalar('train/gr_loss', gr_loss, epoch)
-        writer.add_scalar('val/gr_loss', val_gr_loss, epoch)
+        writer.add_scalar('val/gr_loss', val_loss, epoch)
 
     offset = 0
     # joint training

@@ -173,8 +173,6 @@ class model(nn.Module):
     if mask.sum()>0:
       idxs = (outp-self.ntoks)
       idxs = idxs[mask]
-      # TODO for test reasons, remove later
-      idxs = idxs.clamp(max=len(vertex)-1)
 
       verts = vertex.index_select(0,idxs)
 
