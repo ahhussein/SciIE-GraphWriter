@@ -250,6 +250,10 @@ def main(args):
     for param in graph_model.ge.parameters():
         param.requires_grad = False
 
+    for param in graph_model.vertex_embeddings.parameters():
+        param.requires_grad = True
+
+
     for epoch in range(config['train_both_for']):
         predict_dict, loss, sci_loss, gr_loss, offset = train(
             model,
