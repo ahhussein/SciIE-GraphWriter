@@ -19,6 +19,11 @@ def dynArgs(args):
 def pargs():
   parser = argparse.ArgumentParser(description='Graph Doc Plan')
 
+  # Sci param
+  parser.add_argument("-exp", default="scientific_best_ner", help="exp name")
+  parser.add_argument("-logfile", default="train.log", help="log file where progress will be reported")
+  parser.add_argument("-logdir", default="scientific_best_ner", help="directory where model and tensorboard files will be saved")
+
   #model
   parser.add_argument("-model",default="graph",help="model types: 'graph' for graph transformer (default), 'gat' for graph attention network, 'ents' for entity-only model." )
   parser.add_argument("-esz",default=500,type=int,help='embedding size')
