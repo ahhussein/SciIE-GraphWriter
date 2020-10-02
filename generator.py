@@ -108,14 +108,11 @@ if __name__=="__main__":
   args = pargs()
   args.eval = True
   config = util.get_config("experiments.conf")[exp_name]
-  config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], exp_name))
+  config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], args.logdir))
   models = glob.glob(f'{config["log_dir"]}/graph_model*')
 
   dataset_wrapper = DocumentDataset(config, args, is_eval=True)
   args = dynArgs(args)
-
-
-  config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], exp_name))
 
   # Load graph model
   vertex_embeddings = VertexEmbeddings(config, dataset_wrapper)
