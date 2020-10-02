@@ -147,10 +147,10 @@ def train_joint(model, graph_model, dataset_wrapper, writer, config, device, opt
 
     # Freeze the attention params
     for param in graph_model.ge.parameters():
-        param.requires_grad = False
+        param.requires_grad = True
 
     for param in graph_model.vertex_embeddings.parameters():
-        param.requires_grad = False
+        param.requires_grad = True
 
     # joint training
     data_iter = data.Iterator(
