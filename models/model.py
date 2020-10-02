@@ -252,8 +252,7 @@ class Model(nn.Module):
 
             # Build graphs per document
             if not self.train_disjoint:
-                batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, rel_scores,
-                                                                          masked_flattened_scores, num_doc_entities,
+                batch.adj, rel_lengths, coref_lengths = self.build_graphs(batch, num_entities, num_doc_entities,
                                                                           mention_idx, antecedent_scores, antecedent_mask)
 
                 rel_indices = []
@@ -279,7 +278,8 @@ class Model(nn.Module):
                     num_doc_entities,
                     rel_indices,
                     rel_lengths,
-                    coref_lengths
+                    coref_lengths,
+                    masked_flattened_scores
                 )
 
             predict_dict.update({
@@ -362,7 +362,7 @@ class Model(nn.Module):
 
         return predict_dict, loss
 
-    def build_graphs(self, batch, num_entities, rel_scores, masked_flattened_scores, num_doc_entities, mention_idx,
+    def build_graphs(self, batch, num_entities, num_doc_entities, mention_idx,
                      antecedent_scores, antecedent_mask):
         # Holds adj matrix per document
         adj = []
@@ -385,19 +385,19 @@ class Model(nn.Module):
             doc_entities = num_entities[offset:offset + i]
 
             entities_scores_x_ind = torch.arange(sum(doc_entities)).repeat_interleave(
-                (doc_entities * rel_scores.shape[3]).repeat_interleave(
+                (doc_entities).repeat_interleave(
                     doc_entities.type(torch.int64)
                 ).type(torch.int64)
             )
 
             entities_scores_y_ind = torch.arange(entities_scores_x_ind.shape[0])
 
-            dim_y_without_mentions = (sum(doc_entities * doc_entities) * 8)
+            dim_y_without_mentions = entities_scores_x_ind.shape[0]
             entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx], dim_y_without_mentions + doc_coref_count * 2)
 
             entities_rel_scores_arranged[
                 (entities_scores_x_ind, entities_scores_y_ind)
-            ] = masked_flattened_scores[scores_offset:scores_offset + dim_y_without_mentions]
+            ] = 1 #masked_flattened_scores[scores_offset:scores_offset + dim_y_without_mentions]
 
             # coref scores
             entities_rel_scores_arranged[
@@ -438,7 +438,7 @@ class Model(nn.Module):
             # Build Lower Graph
             ent_offset = 0
             for sent_num_ent in doc_entities:
-                sent_rel_ind_x = torch.tensor([8]).repeat_interleave((sent_num_ent * sent_num_ent).item())
+                sent_rel_ind_x = torch.tensor([1]).repeat_interleave((sent_num_ent * sent_num_ent).item())
                 doc_rel_ind_x.append(
                     torch.arange(start=ent_offset, end=ent_offset + sent_num_ent.item()).repeat(
                         sent_num_ent).repeat_interleave(sent_rel_ind_x))
@@ -454,7 +454,7 @@ class Model(nn.Module):
 
             rel_scores_rearranged[
                 (doc_rel_ind_y, doc_rel_ind_x_tensor)
-            ] = masked_flattened_scores[scores_offset: scores_offset + dim_y_without_mentions]
+            ] = 1 #masked_flattened_scores[scores_offset: scores_offset + dim_y_without_mentions]
 
             # coref scores
             rel_scores_rearranged[
@@ -496,11 +496,15 @@ class Model(nn.Module):
 
         return adj, rel_lengths, coref_lengths
 
-    def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths):
+    def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths, rel_scores):
         out = self.vertex_embeddings.pad_entities(top_spans, ent_len)
-
+        scores = torch.nn.functional.softmax(rel_scores.view(-1, 8), 1).unsqueeze(2)
+        rels = self.rel_embs.weight[rel_indices].view(-1, 500, 8)
         # list of all relations embs
-        rels = self.rel_embs.weight[rel_indices].split(rel_lengths)
+        rels_vertices = torch.bmm(rels, scores).squeeze()
+
+        # TODO integrate rels_vertiex
+        rels = rels_vertices.split(rel_lengths)
 
         coref_indices = torch.cat(
             (
