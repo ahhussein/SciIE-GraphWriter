@@ -562,6 +562,8 @@ class DocumentDataset():
         ents = []
         ent_text = []
         for sent_idx, sentence in enumerate(doc_sentences):
+            nerd.extend([f"<{sentence['ner'][i][2].replace(' ', '').lower()}>" for i in range(len(sentence['ner']))])
+
             current_ent = None
             ner_pointer = 0
             if sentence['ner']:
@@ -610,7 +612,6 @@ class DocumentDataset():
                     if global_idx == current_ent[1]:
                         out_text.append(current_ent[2])
                         tgt_text.append(current_ent[3])
-                        nerd.append(current_ent[2])
                         ents.append(' '.join(ent_text))
                         ent_text = []
                         continue
