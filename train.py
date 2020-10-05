@@ -340,10 +340,6 @@ def train(model, graph_model, dataset, optimizer, writer, config, data_iter, off
     sc_loss = 0
     total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
-
-        if count > 0:
-            break
-
         batch = dataset.fix_batch(batch)
 
         if train_joint:
