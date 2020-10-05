@@ -38,7 +38,7 @@ def main(args):
 
     config = util.get_config("experiments.conf")[name]
 
-    config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
+    config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], 'exp_sci'))
 
     args = dynArgs(args)
 
@@ -63,6 +63,7 @@ def main(args):
 
     while True:
         models = glob.glob(f'{log_dir}/model__*')
+        logger.info(models)
 
         def extract_model_key(x):
             return int(re.findall(r'\d+', x)[0])
@@ -72,12 +73,14 @@ def main(args):
         for i, model_name in enumerate(models):
             if "max" in model_name:
                 continue
+            logger.info(f'evalauting model: {model_name}')
             tmp_checkpoint_path = os.path.join(log_dir, "model.tmp")
             shutil.move(model_name, tmp_checkpoint_path)
             model.load_state_dict(torch.load(tmp_checkpoint_path))
 
             eval_summary, f1, task_to_f1 = evaluate_for_mode(model, dataset, evaluator)
             summarize(writer, eval_summary)
+            
             if f1 > max_f1:
                 max_f1 = f1
 
@@ -86,7 +89,9 @@ def main(args):
                     best_task_f1[task] = f1
 
                 shutil.copy(tmp_checkpoint_path, f"{log_dir}/model.max")
-
+            else:
+                for task, f1 in task_to_f1.items():
+                    logger.info(f"not Max {task} F1: {f1}")
             logger.info(f"Current max combined F1: {max_f1}")
 
             for task, f1 in best_task_f1.items():
