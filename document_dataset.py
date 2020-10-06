@@ -31,7 +31,7 @@ _predict_names = [
 ]
 
 class DocumentDataset():
-    def __init__(self, config, args, is_eval = False):
+    def __init__(self, config, args, is_eval = False, logger = None):
         self.config = config
         self.args = args
         self.lm_layers = self.config["lm_layers"]
@@ -43,6 +43,7 @@ class DocumentDataset():
         self.input_names = _input_names
         self.label_names = _label_names
         self.predict_names = _predict_names
+        self.logger = logger
 
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
@@ -94,12 +95,14 @@ class DocumentDataset():
         self.rel_labels = {l: i for i, l in enumerate(self.rel_labels_inv)}
         self.rel_labels_extended = {l: i for i, l in enumerate(self.extended_rel_labels_inv)}
 
-        # TODO Understand the difference between the two glove files
-        self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"])
-        #
+        self.log('info', "context embeddings")
+        self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"], logger=logger)
+
+        self.log('info', "head embeddings")
         self.head_embeddings = data_utils.EmbeddingDictionary(
             config["head_embeddings"],
-            maybe_cache=self.context_embeddings
+            maybe_cache=self.context_embeddings,
+            logger=logger
         )
 
         self.char_embedding_size = config["char_embedding_size"]
@@ -178,7 +181,7 @@ class DocumentDataset():
 
             #coref_eval_data[doc_id] = document
 
-        print("Loaded {} eval examples.".format(doc_count))
+        self.log("info", f"Loaded {doc_count} eval examples.")
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
@@ -244,7 +247,8 @@ class DocumentDataset():
             eval_data[example['doc_key']] = data_utils.split_example_for_eval(document)
             coref_eval_data[example['doc_key']] = document
 
-        print("Loaded {} eval examples.".format(doc_count))
+        self.log("info", f"Loaded {doc_count} eval examples.")
+
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
@@ -299,8 +303,9 @@ class DocumentDataset():
             cluster_id_offset += len(document["clusters"])
             num_sentences += len(doc_examples[-1])
 
-        print("Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
+        self.log("info", "Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
             doc_id, num_sentences, cluster_id_offset, num_mentions))
+
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
@@ -619,6 +624,16 @@ class DocumentDataset():
         return out_text, tgt_text, raw_out, nerd, ents
 
     def mkGraph(self, example):
+        # Build dict for entities
+        entities2idx = {}
+        abs_index = 0
+        for sent_idx, sent_num_entities in enumerate(example.ner_len):
+            for ent_idx in range(sent_num_entities):
+                ent_start = example.ner_starts[sent_idx][ent_idx]
+                ent_end = example.ner_ends[sent_idx][ent_idx]
+                entities2idx[f"{ent_start}-{ent_end}-{sent_idx}"] = abs_index
+                abs_index += 1
+
         # Preprocess corefs
         cluster2candidates = {}
         for sent_idx in range(len(example.coref_cluster_ids)):
@@ -626,6 +641,10 @@ class DocumentDataset():
                 cluster_id = cluster_id.item()
                 if cluster_id not in cluster2candidates:
                     cluster2candidates[cluster_id] = []
+
+                # Ensure entity has reference in the ner section
+                if f"{example.coref_starts[sent_idx][list_idx]}-{example.coref_ends[sent_idx][list_idx]}-{sent_idx}" not in entities2idx:
+                    continue
 
                 cluster2candidates[cluster_id].append((
                     example.coref_starts[sent_idx][list_idx],
@@ -646,16 +665,6 @@ class DocumentDataset():
         for i in range(ent_len):
             adj[i, ent_len] = 1
             adj[ent_len, i] = 1
-
-        # Build dict for entities
-        entities2idx = {}
-        abs_index = 0
-        for sent_idx, sent_num_entities in enumerate(example.ner_len):
-            for ent_idx in range(sent_num_entities):
-                ent_start = example.ner_starts[sent_idx][ent_idx]
-                ent_end = example.ner_ends[sent_idx][ent_idx]
-                entities2idx[f"{ent_start}-{ent_end}-{sent_idx}"] = abs_index
-                abs_index += 1
 
         # Self connection
         for i in range(adjsize):
@@ -710,3 +719,8 @@ class DocumentDataset():
                     adj[c, b] = 1
 
         return (adj, rel, entities2idx)
+
+    def log(self, level, message):
+        if self.logger:
+            getattr(self.logger, level)(message)
+
