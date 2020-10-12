@@ -370,22 +370,22 @@ class Model(nn.Module):
         scores_offset = 0
         doc_rel_ind_x = []
         rel_lengths = []
-        # coref_lengths = []
-        # coref_doc_offset = 0
-        # coref_offset = 0
+        coref_lengths = []
+        coref_doc_offset = 0
+        coref_offset = 0
         for idx, i in enumerate(batch.doc_len):
 
             # Prepare mentions indices
-            # entity_rel_indx, rel_entity_indy, coref_doc_offset, doc_coref_count = self.arrange_coref_scores_for_document(
-            #     antecedent_mask, mention_idx[idx], coref_doc_offset)
+            entity_rel_indx, rel_entity_indy, coref_doc_offset, doc_coref_count = self.arrange_coref_scores_for_document(
+                antecedent_mask, mention_idx[idx], coref_doc_offset)
 
-            # doc_coref_entities_count = len(mention_idx[idx])
+            doc_coref_entities_count = len(mention_idx[idx])
 
-            # coref_lengths.append(doc_coref_count)
+            coref_lengths.append(doc_coref_count)
             doc_entities = num_entities[offset:offset + i]
 
             entities_scores_x_ind = torch.arange(sum(doc_entities)).repeat_interleave(
-                doc_entities.repeat_interleave(
+                (doc_entities).repeat_interleave(
                     doc_entities.type(torch.int64)
                 ).type(torch.int64)
             )
@@ -393,32 +393,32 @@ class Model(nn.Module):
             entities_scores_y_ind = torch.arange(entities_scores_x_ind.shape[0])
 
             dim_y_without_mentions = entities_scores_x_ind.shape[0]
-            entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx], dim_y_without_mentions)
+            entities_rel_scores_arranged = torch.zeros(num_doc_entities[idx], dim_y_without_mentions + doc_coref_count * 2)
 
             entities_rel_scores_arranged[
                 (entities_scores_x_ind, entities_scores_y_ind)
             ] = 1 #masked_flattened_scores[scores_offset:scores_offset + dim_y_without_mentions]
 
             # coref scores
-            # entities_rel_scores_arranged[
-            #     (entity_rel_indx,
-            #      torch.arange(
-            #          start=dim_y_without_mentions,
-            #          end=dim_y_without_mentions + doc_coref_count
-            #      ))
-            # ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
-            #     antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+            entities_rel_scores_arranged[
+                (entity_rel_indx,
+                 torch.arange(
+                     start=dim_y_without_mentions,
+                     end=dim_y_without_mentions + doc_coref_count
+                 ))
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
 
             # coref scores inverse
-            # entities_rel_scores_arranged[
-            #     (rel_entity_indy,
-            #      torch.arange(
-            #          start=dim_y_without_mentions + doc_coref_count,
-            #          end=dim_y_without_mentions + doc_coref_count * 2
-            #      )
-            #      )
-            # ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
-            #     antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+            entities_rel_scores_arranged[
+                (rel_entity_indy,
+                 torch.arange(
+                     start=dim_y_without_mentions + doc_coref_count,
+                     end=dim_y_without_mentions + doc_coref_count * 2
+                 )
+                 )
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
 
             entities_adj = torch.diag(torch.ones(entities_rel_scores_arranged.shape[0] + 1))
 
@@ -457,21 +457,21 @@ class Model(nn.Module):
             ] = 1 #masked_flattened_scores[scores_offset: scores_offset + dim_y_without_mentions]
 
             # coref scores
-            # rel_scores_rearranged[
-            #     (torch.arange(start=dim_y_without_mentions, end=dim_y_without_mentions + doc_coref_count),
-            #      rel_entity_indy)
-            # ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
-            #     antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
-            #
-            # # coref scores inverse
-            # rel_scores_rearranged[
-            #     (torch.arange(
-            #         start=dim_y_without_mentions+doc_coref_count,
-            #         end=dim_y_without_mentions+ doc_coref_count * 2
-            #     ),
-            #      entity_rel_indx)
-            # ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
-            #     antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+            rel_scores_rearranged[
+                (torch.arange(start=dim_y_without_mentions, end=dim_y_without_mentions + doc_coref_count),
+                 rel_entity_indy)
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
+
+            # coref scores inverse
+            rel_scores_rearranged[
+                (torch.arange(
+                    start=dim_y_without_mentions+doc_coref_count,
+                    end=dim_y_without_mentions+ doc_coref_count * 2
+                ),
+                 entity_rel_indx)
+            ] = antecedent_scores[coref_offset:coref_offset + doc_coref_entities_count, 1:][
+                antecedent_mask[coref_offset:coref_offset + doc_coref_entities_count, :]].view(-1)
 
             rel_lengths.append(dim_y_without_mentions)
 
@@ -492,9 +492,9 @@ class Model(nn.Module):
             doc_rel_ind_x = []
             offset += i
             scores_offset += dim_y_without_mentions
-            #coref_offset += doc_coref_entities_count
+            coref_offset += doc_coref_entities_count
 
-        return adj, rel_lengths, []#coref_lengths
+        return adj, rel_lengths, coref_lengths
 
     def prepare_adj_embs(self, top_spans, ent_len, rel_indices, rel_lengths, coref_lengths, rel_scores):
         out = self.vertex_embeddings.pad_entities(top_spans, ent_len)
@@ -506,32 +506,28 @@ class Model(nn.Module):
         # TODO integrate rels_vertiex
         rels = rels_vertices.split(rel_lengths)
 
-        # coref_indices = torch.cat(
-        #     (
-        #         torch.tensor(
-        #             self.data.rel_labels_extended['MERGE']
-        #         ).repeat(sum(coref_lengths)),
-        #         torch.tensor(
-        #             self.data.rel_labels_extended['MERGE'] + len(self.data.rel_labels_extended) - 1
-        #         ).repeat(sum(coref_lengths))
-        #     ), 0
-        # )
+        coref_indices = torch.cat(
+            (
+                torch.tensor(
+                    self.data.rel_labels_extended['MERGE']
+                ).repeat(sum(coref_lengths)),
+                torch.tensor(
+                    self.data.rel_labels_extended['MERGE'] + len(self.data.rel_labels_extended) - 1
+                ).repeat(sum(coref_lengths))
+            ), 0
+        )
 
-        #coref_rels = self.rel_embs.weight[coref_indices].split([x * 2 for x in coref_lengths])
+        coref_rels = self.rel_embs.weight[coref_indices].split([x * 2 for x in coref_lengths])
 
         rels_list = []
 
         for idx, rel in enumerate(rels):
-            # rels_list.append(
-            #     torch.cat(
-            #         (
-            #             torch.cat((self.rel_embs.weight[self.data.rel_labels_extended['ROOT']].unsqueeze(0), rel), 0),
-            #             coref_rels[idx]
-            #         ), 0)
-            # )
-
             rels_list.append(
-               torch.cat((self.rel_embs.weight[self.data.rel_labels_extended['ROOT']].unsqueeze(0), rel), 0),
+                torch.cat(
+                    (
+                        torch.cat((self.rel_embs.weight[self.data.rel_labels_extended['ROOT']].unsqueeze(0), rel), 0),
+                        coref_rels[idx]
+                    ), 0)
             )
 
         return out, rels_list, torch.tensor(ent_len)
