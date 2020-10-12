@@ -73,7 +73,7 @@ class Model(nn.Module):
         # Get entity representations.
         if self.config["relation_weight"] > 0:
             # score candidates
-            # [num-candidates] # TODO check scores what effects them
+            # [num-candidates]
             flat_candidate_entity_scores = self.unary_scores(candidate_span_emb)
 
             # Get flat candidate scores in the original shape # [num_sentences, max_num_candidates]
@@ -138,7 +138,15 @@ class Model(nn.Module):
                 flat_candidate_mask
             )  # [num_candidates]
 
-            k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"])).type(torch.int32)
+            if self.train_disjoint:
+                k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"]))
+            else:
+                k = torch.min(
+                    torch.tensor(doc_len * self.config["mention_ratio"]).type(torch.int),
+                    torch.tensor(self.config['max_mention_k_joint']).type(torch.int)
+                )
+
+            k = k.type(torch.int32)
 
             # Different from the predicted indices from entities, meaning that
             # mention scores are independant from span scores and can result in different spans
