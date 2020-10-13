@@ -381,6 +381,8 @@ class Model(nn.Module):
         coref_lengths = []
         coref_doc_offset = 0
         coref_offset = 0
+
+        antecedent_scores = torch.sigmoid(antecedent_scores)
         for idx, i in enumerate(batch.doc_len):
 
             # Prepare mentions indices
