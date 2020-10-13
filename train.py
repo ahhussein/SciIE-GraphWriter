@@ -147,7 +147,7 @@ def train_joint(model, graph_model, dataset_wrapper, writer, config, device, opt
 
     # Freeze the attention params
     for param in graph_model.ge.parameters():
-        param.requires_grad = True
+        param.requires_grad = False
 
     for param in graph_model.vertex_embeddings.parameters():
         param.requires_grad = True
@@ -340,10 +340,6 @@ def train(model, graph_model, dataset, optimizer, writer, config, data_iter, off
     sc_loss = 0
     total_loss = torch.tensor(0)
     for count, batch in enumerate(data_iter):
-
-        if count > 0:
-            break
-
         batch = dataset.fix_batch(batch)
 
         if train_joint:
