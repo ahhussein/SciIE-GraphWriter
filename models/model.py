@@ -138,8 +138,9 @@ class Model(nn.Module):
                 flat_candidate_mask
             )  # [num_candidates]
 
-            if self.train_disjoint:
+            if self.train_disjoint or not self.config['max_mention_k_joint']:
                 k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"]))
+                self.log('info', 'Original mention ratio')
             else:
                 k = torch.min(
                     torch.tensor(doc_len * self.config["mention_ratio"]).type(torch.int),

@@ -147,7 +147,7 @@ def train_joint(model, graph_model, dataset_wrapper, writer, config, device, opt
 
     # Freeze the attention params
     for param in graph_model.ge.parameters():
-        param.requires_grad = True
+        param.requires_grad = False
 
     for param in graph_model.vertex_embeddings.parameters():
         param.requires_grad = True
