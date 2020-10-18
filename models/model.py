@@ -140,7 +140,6 @@ class Model(nn.Module):
 
             if self.train_disjoint or not self.config['max_mention_k_joint']:
                 k = torch.floor(torch.tensor(doc_len * self.config["mention_ratio"]))
-                self.log('info', 'Original mention ratio')
             else:
                 k = torch.min(
                     torch.tensor(doc_len * self.config["mention_ratio"]).type(torch.int),
@@ -246,8 +245,6 @@ class Model(nn.Module):
                 batch.rel_e1_starts, batch.rel_e1_ends, batch.rel_e2_starts, batch.rel_e2_ends,
                 batch.rel_labels, batch.rel_len
             )  # [num_sentences, max_num_ents, max_num_ents]
-            # TODO rel mask is needed here to avoid the padding
-            self.log('info', f"non zero labels: {rel_labels.nonzero()}")
             rel_scores, rel_loss, rel_loss_mask = self.rel_scores(
                 entity_emb,  # [num_sentences, max_num_ents, emb]
                 entity_scores,  # [num_sentences, max_num_ents]
