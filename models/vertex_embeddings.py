@@ -15,7 +15,7 @@ class VertexEmbeddings(nn.Module):
         self.config = config
         self.emb_projection = nn.Linear(1270, 500)
         torch.nn.init.xavier_uniform_(self.emb_projection.weight)
-        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 1, 500)
+        self.rel_embs = nn.Embedding(2 * len(data.rel_labels_extended) - 3, 500)
 
     def forward(self, batch, generate_candiadtes=True):
         # max sentence length in terms of number of words
