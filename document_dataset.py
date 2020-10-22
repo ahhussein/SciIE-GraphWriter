@@ -123,7 +123,7 @@ class DocumentDataset():
             self.val_dataset = data.Dataset(self.eval_examples, self.fields)
 
         if is_eval:
-            self.lm_file = h5py.File(config["lm_path_dev"], "r")
+            self.lm_file = h5py.File(config["lm_path_test"], "r")
             self._load_test_data()
             self.test_dataset = data.Dataset(self.eval_examples, self.fields)
 
@@ -226,7 +226,7 @@ class DocumentDataset():
         coref_eval_data = {}
 
 
-        with open(self.config["eval_path"]) as f:
+        with open(self.config["test_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
 
         self.populate_sentence_offset(eval_examples)
@@ -659,7 +659,7 @@ class DocumentDataset():
         adjsize = ent_len + 1 + 2 * rel_len + coref_len
         adj = torch.zeros(adjsize, adjsize)
 
-        rel = [self.rel_labels_extended['ROOT']]
+        rel = [self.rel_labels_extended['ROOT']-1]
 
         # global node
         for i in range(ent_len):
@@ -674,8 +674,8 @@ class DocumentDataset():
         for sent_idx, sent_num_rel in enumerate(example.rel_len):
             for rel_idx in range(sent_num_rel):
                 rel.extend([
-                    (example.rel_labels[sent_idx][rel_idx]).item(),
-                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended)).item()
+                    (example.rel_labels[sent_idx][rel_idx]).item()-1,
+                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended)).item() - 2
                 ])
 
                 first_ent_start = example.rel_e1_starts[sent_idx][rel_idx]
@@ -704,13 +704,13 @@ class DocumentDataset():
 
                     if idx < idx2:
                         rel.extend([
-                            self.rel_labels_extended['MERGE']
+                         self.rel_labels_extended['MERGE'] - 1
                         ])
 
 
                     else:
                         rel.extend([
-                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended)
+                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended) - 2
                         ])
 
                     c = ent_len + len(rel) - 1
