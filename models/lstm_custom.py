@@ -59,12 +59,20 @@ class CustomLSTMCell(nn.Module):
         super(CustomLSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.weight_ih = Parameter(torch.randn(input_size + hidden_size, 3 * hidden_size))
+        # self.weight_ih = Parameter(torch.randn(input_size + hidden_size, 3 * hidden_size))
         #self.weight_hh = Parameter(torch.randn(3 * hidden_size, hidden_size))
-        self.bias_ih = Parameter(torch.randn(3 * hidden_size))
-        torch.nn.init.uniform_(self.bias_ih, -1 * util.golort_factor(self.bias_ih.shape[0]), util.golort_factor(self.bias_ih.shape[0]))
+        # self.bias_ih = Parameter(torch.randn(3 * hidden_size))
+        # torch.nn.init.uniform_(self.bias_ih, -1 * util.golort_factor(self.bias_ih.shape[0]), util.golort_factor(self.bias_ih.shape[0]))
 
-        self.weight_ih.data = self.weights_init_cat(self.weight_ih.shape)
+        # self.weight_ih.data = self.weights_init_cat(self.weight_ih.shape)
+
+        self.projection = nn.Linear(
+            input_size + hidden_size,
+            3 * hidden_size
+        )
+
+        self.projection.weight = nn.Parameter(self.weights_init_cat(self.projection.weight.shape))
+        torch.nn.init.uniform_(self.projection.bias, -1 * util.golort_factor(self.projection.bias.shape[0]), util.golort_factor(self.projection.bias.shape[0]))
 
     def forward(self, input, state, dropout_mask):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -72,7 +80,7 @@ class CustomLSTMCell(nn.Module):
 
         hx = hx * dropout_mask
 
-        gates = torch.mm(torch.cat((input, hx), 1), self.weight_ih) + self.bias_ih
+        gates = self.projection(torch.cat((input, hx), 1))
         i, j, o = gates.chunk(3, 1)
 
         i = torch.sigmoid(i)
