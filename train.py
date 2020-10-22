@@ -294,41 +294,44 @@ def main(args):
     if args.device.type != 'cpu':
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-    train_sci(
-        model,
-        graph_model,
-        dataset_wrapper,
-        writer,
-        config,
-        args.device,
-        optimizer,
-        sci_opt,
-        scheduler
-    )
+    if config['train_sci_for'] > 0:
+        train_sci(
+            model,
+            graph_model,
+            dataset_wrapper,
+            writer,
+            config,
+            args.device,
+            optimizer,
+            sci_opt,
+            scheduler
+        )
 
-    train_graph(
-        model,
-        graph_model,
-        dataset_wrapper,
-        writer,
-        config,
-        args.device,
-        optimizer,
-        graph_opt
-    )
+    if config['train_graph_for'] > 0:
+        train_graph(
+            model,
+            graph_model,
+            dataset_wrapper,
+            writer,
+            config,
+            args.device,
+            optimizer,
+            graph_opt
+        )
 
-    train_joint(
-        model,
-        graph_model,
-        dataset_wrapper,
-        writer,
-        config,
-        args.device,
-        optimizer,
-        graph_opt,
-        sci_opt,
-        scheduler
-    )
+    if config['train_both_for'] > 0:
+        train_joint(
+            model,
+            graph_model,
+            dataset_wrapper,
+            writer,
+            config,
+            args.device,
+            optimizer,
+            graph_opt,
+            sci_opt,
+            scheduler
+        )
 
 
 def train(model, graph_model, dataset, optimizer, writer, config, data_iter, offset=0, train_graph=True, train_sci=True, train_joint=False):
