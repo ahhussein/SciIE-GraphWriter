@@ -7,11 +7,12 @@ import operator
 
 
 class EmbeddingDictionary(object):
-    def __init__(self, info, normalize=True, maybe_cache=None):
+    def __init__(self, info, normalize=True, maybe_cache=None, logger=None):
         self._size = info["size"]
         self._lowercase = info["lowercase"]
         self._normalize = normalize
         self._path = info["path"]
+        self.logger = logger
 
         if maybe_cache is not None and maybe_cache._path == self._path:
             assert self._size == maybe_cache._size
@@ -29,7 +30,7 @@ class EmbeddingDictionary(object):
         Load a dict of word: <embedding> {WORD: [...]}
         """
 
-        print("Loading word embeddings from {}...".format(path))
+        self.log("info", "Loading word embeddings from {}...".format(path))
 
         default_embedding = torch.zeros(self.size)
         embedding_dict = collections.defaultdict(lambda: default_embedding)
@@ -56,9 +57,13 @@ class EmbeddingDictionary(object):
             if vocab_size is not None:
                 assert vocab_size == len(embedding_dict)
 
-            print("Done loading word embeddings.")
+            self.log("info", "Done loading word embeddings.")
 
         return embedding_dict
+
+    def log(self, level, message):
+        if self.logger:
+            getattr(self.logger, level)(message)
 
     def __getitem__(self, key):
         if self._lowercase:
@@ -216,7 +221,6 @@ def get_span_candidates(text_len, max_sentence_len, max_mention_width):
     candidate_ends = torch.mul(candidate_ends, candidate_mask)
 
     return candidate_starts, candidate_ends, candidate_mask
-
 
 def get_span_task_labels(arg_starts, arg_ends, batch, max_sentence_length):
     """

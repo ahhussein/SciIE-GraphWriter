@@ -1,15 +1,29 @@
 import sys
 import os
 import util
-from document_dataset import EvalDataset
+from document_dataset import DocumentDataset
 from models.model import Model
 import torch
 from evaluator import Evaluator
-from eval_iter import EvalIterator
+from GraphWriter.pargs import pargs, dynArgs
+from torchtext import data
+import logging
+from models.vertex_embeddings import VertexEmbeddings
+
+
+torch.manual_seed(0)
+
+logger = logging.getLogger('myapp')
+hdlr = logging.FileHandler('predict.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.DEBUG)
 
 
 
-def main():
+
+def main(args):
     # ds = dataset(args)
     if len(sys.argv) > 1:
         name = sys.argv[1]
@@ -23,48 +37,56 @@ def main():
 
     config["log_dir"] = util.mkdirs(os.path.join(config["log_root"], name))
 
-    # Dynamic batch size.
-    config["batch_size"] = -1
-    config["max_tokens_per_batch"] = -1
 
-    # Use dev lm, if provided.
-    if config["lm_path"] and "lm_path_dev" in config and config["lm_path_dev"]:
-        config["lm_path"] = config["lm_path_dev"]
+    args = dynArgs(args)
 
-    # TODO test data set
-    dataset = EvalDataset(config=config)
+    dataset = DocumentDataset(config, args, True)
 
-    # TODO is training model eval
-    model = Model(config, dataset)
+    config.device = args.device
 
-    evaluator = Evaluator(config, dataset, model)
+    model_eval_name = 'model__3.loss-0.0.lr-0.0004990005'
 
-    # TODO log
+    vertex_embeddings = VertexEmbeddings(config, dataset)
+
+    model = Model(config, dataset, vertex_embeddings, logger)
+
+    model.to(args.device)
+
+    evaluator = Evaluator(config, dataset, logger)
+
     log_dir = config["log_dir"]
 
-    model.load_state_dict(torch.load(f"{log_dir}/model__1"))
+    model.load_state_dict(torch.load(f"{log_dir}/{model_eval_name}"))
 
     # Load batch of sentences for each document
-    data_iter = EvalIterator(dataset, batch_size=1, sort=False, train=False)
+    data_iter = data.Iterator(
+        dataset.test_dataset,
+        1,
+        # device=args.device,
+        sort_key=lambda x: len(x.text_len),
+        repeat=False,
+        train=False
+    )
 
+    predictions = {}
+    total_loss = 0
+    model.eval()
     for count, batch in enumerate(data_iter):
-        doc_batch = dataset.fix_batch(batch)
-        evaluator.evaluate(doc_batch)
-        if (count + 1) % 50 == 0:
-            print("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+        with torch.no_grad():
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
+            doc_batch = dataset.fix_batch(batch)
+            predict_dict, loss = model(doc_batch)
+
+            predictions[batch.doc_key[0]] = predict_dict
+
+            logger.info("Evaluated {}/{} documents.".format(count + 1, len(evaluator.coref_eval_data)))
+
+            total_loss += loss
+    evaluator.evaluate(predictions, total_loss)
     evaluator.write_out()
-    # Move to evaualtor
-    # summary_dict, main_metric, task_to_f1 = evaluator.summarize_results()
-    # print(summary_dict)
-    # print(main_metric)
-    # print(task_to_f1)
-
-
-
-
 
 
 if __name__ == "__main__":
-    util.set_gpus()
-
-    main()
+    args = pargs()
+    main(args)

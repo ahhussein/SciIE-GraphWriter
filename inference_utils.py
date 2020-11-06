@@ -117,13 +117,15 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
                 best_state[0] = (t1, rs1)
 
     for start, end, i in spans:
+        start = start.item()
+        end = end.item()
         # Dummy label
         assert scores[i][0] == 0
         # The extra dummy score should be same for all states, so we can safely skip arguments overlap
         # with the predicate.
         if pred_id is not None and start <= pred_id and pred_id <= end:
             continue
-        r0 = labels[i]  # Locally best role assignment.
+        r0 = labels[i].item()  # Locally best role assignment.
         # Strictly better to incorporate a dummy span if it has the highest local score.
         if r0 == 0:
             continue
@@ -137,7 +139,7 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
             # Update states if best role is not a core arg.
             if not u_constraint or not r0_str in _CORE_ARGS:
                 for rs in role_states:
-                    _update_state(t, rs, end + 1, rs, scores[i][r0], i, r0)
+                    _update_state(t, rs, end + 1, rs, scores[i][r0].item(), i, r0)
             else:
                 for rs in role_states:
                     for r in range(1, num_roles):
@@ -149,16 +151,12 @@ def _dp_decode_non_overlapping_spans(starts, ends, scores, max_len, labels_inv, 
                                 _update_state(t, rs, end + 1, rs | core_state, scores[i][r], i, r)
     # Backtrack to decode.
     new_spans = []
-    new_span_indices = []
     t, rs = best_state[0]
-    labels_result = []
     while (t, rs) in pointers:
         i, r, t0, rs0 = pointers[(t, rs)]
         new_spans.append((starts[i], ends[i], labels_inv[r]))
-        labels_result.append(labels)
-        new_span_indices.append(i)
         t = t0
         rs = rs0
     # print spans
     # print new_spans[::-1]
-    return new_spans[::-1], new_span_indices, labels_result
+    return new_spans[::-1]

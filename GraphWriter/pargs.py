@@ -19,13 +19,18 @@ def dynArgs(args):
 def pargs():
   parser = argparse.ArgumentParser(description='Graph Doc Plan')
 
+  # Sci param
+  parser.add_argument("-exp", default="scientific_best_ner", help="exp name")
+  parser.add_argument("-logfile", default="train.log", help="log file where progress will be reported")
+  parser.add_argument("-logdir", default="scientific_best_ner", help="directory where model and tensorboard files will be saved")
+
   #model
   parser.add_argument("-model",default="graph",help="model types: 'graph' for graph transformer (default), 'gat' for graph attention network, 'ents' for entity-only model." )
   parser.add_argument("-esz",default=500,type=int,help='embedding size')
   parser.add_argument("-hsz",default=500,type=int,help="hidden state size")
   parser.add_argument("-prop",default=6,type=int,help="number of layers/blocks")
   parser.add_argument("-title",action='store_true',help="do not use title as input, only graph/entities")
-  parser.add_argument("-drop",default=0.1,type=float,help="dropout rate")
+  parser.add_argument("-drop",default=0.5,type=float,help="dropout rate")
   parser.add_argument("-embdrop",default=0,type=float,help="embedding dropout")
   parser.add_argument("-layers",default=2,type=int,help='encoder lstm layers')
   #parser.add_argument("-blockdrop",default=0.1)
@@ -58,7 +63,7 @@ def pargs():
   parser.add_argument('-l2', type=float, default=0.01)
   parser.add_argument('-vector_l2', action='store_true')
   '''
-  parser.add_argument("-lr",default=0.1,type=float,help='learning rate')
+  parser.add_argument("-lr",default=0.05,type=float,help='learning rate')
   parser.add_argument("-lrhigh",default=0.5,type=float,help="high learning rate for cycling")
   parser.add_argument("-lrstep",default=4, type=int,help='steps in cycle')
   parser.add_argument("-lrwarm",action="store_true",help='use cycling learning rate')
@@ -100,7 +105,7 @@ def pargs():
   if args.gpu == -1:
     args.gpu = 'cpu'
   args.device = torch.device(args.gpu)
-
+  #args.device = 'cpu'
   #args.options_file = "../elmo/elmo_2x2048_256_2048cnn_1xhighway_options.json"
   #args.weight_file = "../elmo/elmo_2x2048_256_2048cnn_1xhighway_weights.hdf5"
 

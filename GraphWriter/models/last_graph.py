@@ -4,6 +4,7 @@ from torch import nn
 from torch.nn import functional as F
 from GraphWriter.models.graphAttn import GAT
 from GraphWriter.models.attention import MultiHeadAttention
+from GraphWriter.models.attention import MultiHeadAttention2
 
 
 def gelu(x):
@@ -63,9 +64,12 @@ class graph_encode(nn.Module):
     if self.args.entdetach:
       vents = torch.tensor(vents,requires_grad=False)
 
+
+
     glob = []
     graphs = []
     for i,adj in enumerate(adjs):
+      adj = adj.to(self.get_device())
       # PRocess sample by sample
       #  num of entities in a sample + num of relations in a sample X hs
       # DISCARD PADDING
@@ -93,18 +97,14 @@ class graph_encode(nn.Module):
         else:
           vgraphs = []
 
+
           for k in range(vgraph.shape[0]):
-            neighbour_idx = adj[k].nonzero(as_tuple=True)
-
-            neighbour_scores = adj[k][neighbour_idx]
-
-            keys = vgraph[neighbour_idx]
-
-            vgraph_indv = self.gat[j](vgraph[k].unsqueeze(0), keys, neighbour_scores)
-
+            vgraph_indv = self.gat[j](vgraph[k].unsqueeze(0), vgraph, adj[k])
             vgraphs.append(vgraph_indv)
-
           vgraph = torch.cat(vgraphs, 0)
+          # Repeating N number of times bcause attention is n^2
+          # ngraph = vgraph.repeat(N, 1).view(N, N, -1).clone().detach().requires_grad_(False)
+          # vgraph = self.gat[j](vgraph.unsqueeze(1), ngraph, mask)
 
       graphs.append(vgraph)
 
@@ -116,7 +116,7 @@ class graph_encode(nn.Module):
     gents = [self.pad(x,max(elens)) for x in graphs]
     # PAD graphs again!
     gents = torch.stack(gents,0)
-    elens = torch.LongTensor(elens)
+    elens = torch.LongTensor(elens).to(self.get_device())
     emask = torch.arange(0,gents.size(1)).unsqueeze(0).repeat(gents.size(0),1).long()
     # emask and vents should be in the same device. 
     emask = (emask <= elens.unsqueeze(1)).to(self.get_device())

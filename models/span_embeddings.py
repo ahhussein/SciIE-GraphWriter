@@ -1,6 +1,7 @@
 from torch import nn, dtype
 import torch
 import util
+import torch.nn.functional as nnf
 
 class SpanEmbeddings(nn.Module):
     def __init__(self, config, data):
@@ -9,17 +10,23 @@ class SpanEmbeddings(nn.Module):
         self.data = data
 
         # Embeddings for span widths
-        emb = torch.empty(self.config['max_arg_width'], self.config['feature_size'])
+        self.max_width = self.config['max_arg_width']
+
+        self.max_width = self.config['max_arg_width']+5
+
+        emb = torch.empty(self.max_width, self.config['feature_size'])
+
         nn.init.xavier_uniform_(emb)
         self.embeddings = nn.Parameter(emb)
 
         self.softmax = nn.Softmax(1)
-        self.dropout = nn.Dropout(1- self.config['dropout_rate'])
+        self.dropout = nn.Dropout(self.config['dropout_rate'])
         self.ffnn = nn.Linear(
-            config['contextualization_size'] * config['contextualization_layers'] * 2,
+            config['contextualization_size'] * 2,
             self.config['num_attention_heads']
         )
         torch.nn.init.xavier_uniform_(self.ffnn.weight)
+        torch.nn.init.uniform_(self.ffnn.bias, -1 * util.golort_factor(self.ffnn.bias.shape[0]), util.golort_factor(self.ffnn.bias.shape[0]))
 
     def forward(self, head_emb, context_outputs, span_starts, span_ends):
         """Compute span representation shared across tasks.
@@ -42,7 +49,7 @@ class SpanEmbeddings(nn.Module):
 
         # [num-spans]
         span_widths = 1 + span_ends - span_starts
-        max_arg_width = self.config['max_arg_width']
+        max_arg_width = self.max_width
 
         if self.config["use_features"]:
             span_width_index = span_widths - 1
@@ -98,7 +105,7 @@ class UnaryScores(nn.Module):
         super().__init__()
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 
@@ -107,30 +114,32 @@ class UnaryScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.relu = nn.ReLU()
-
         self.output = nn.Linear(
             self.config["ffnn_size"],
             1
         )
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
+
 
     def forward(self, candidate_span_emb):
         # candidate_span_emb = [num-candidates, emb]
-        hidden1 = self.dropout(
-                    self.relu(
-                        self.input(candidate_span_emb)
-                    )
+        hidden1 = nnf.dropout(
+            nnf.relu(
+                self.input(candidate_span_emb)
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-                    self.relu(
-                        self.hidden(hidden1)
-                    )
+        hidden2 = nnf.dropout(
+            nnf.relu(
+                self.hidden(hidden1)
+            ), self.dropout
         )
 
 
@@ -146,7 +155,7 @@ class RelScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270 * 3, #TODO
+            500 * 3, #TODO
             self.config["ffnn_size"]
         )
 
@@ -155,8 +164,6 @@ class RelScores(nn.Module):
             self.config["ffnn_size"]
         )
 
-        self.relu = nn.ReLU()
-
         self.output = nn.Linear(
             self.config["ffnn_size"],
             num_labels - 1
@@ -164,10 +171,13 @@ class RelScores(nn.Module):
 
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
 
     def forward(self, entity_emb, entity_scores, rel_labels, num_predicted_entities):
         num_sentences = entity_emb.shape[0]
@@ -183,16 +193,16 @@ class RelScores(nn.Module):
         pair_emb_size = pair_emb.shape[3]
         flat_pair_emb = pair_emb.view([num_sentences * num_entities * num_entities, pair_emb_size])
 
-        hidden1 = self.dropout(
-            self.relu(
+        hidden1 = nnf.dropout(
+            nnf.relu(
                 self.input(flat_pair_emb)
-            )
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-            self.relu(
+        hidden2 = nnf.dropout(
+            nnf.relu(
                 self.hidden(hidden1)
-            )
+            ), self.dropout
         )
 
         scores = self.output(hidden2)
@@ -212,15 +222,12 @@ class RelScores(nn.Module):
         num_labels = rel_scores.shape[3]
         entities_mask = util.sequence_mask(num_predicted_entities, max_num_entities)  # [num_sentences, max_num_entities]
 
-        # TODO use for the embedding representation fo entities rel
         rel_loss_mask = (
             entities_mask.unsqueeze(2) # [num_sentences, max_num_entities, 1]
             &
             entities_mask.unsqueeze(1) # [num_sentences, 1, max_num_entities]
         )  # [num_sentences, max_num_entities, max_num_entities]
 
-
-        # TODO important ensure that loss functiion is correct replacement for tensorflow
         # tf.nn.sparse_softmax_cross_entropy_with_logits
         loss = self.loss(rel_scores.view([-1, num_labels]), rel_labels.reshape(-1))
 
@@ -234,7 +241,7 @@ class NerScores(nn.Module):
         self.num_labels = num_labels
         self.config = config
         self.input = nn.Linear(
-            1270, #TODO
+            500, #TODO
             self.config["ffnn_size"]
         )
 
@@ -248,29 +255,31 @@ class NerScores(nn.Module):
             num_labels - 1
         )
 
-        self.relu = nn.ReLU()
-
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-        self.dropout = nn.Dropout(1 - self.config['dropout_rate'])
+        self.dropout = self.config['dropout_rate']
         torch.nn.init.xavier_uniform_(self.input.weight)
         torch.nn.init.xavier_uniform_(self.hidden.weight)
         torch.nn.init.xavier_uniform_(self.output.weight)
+        torch.nn.init.uniform_(self.input.bias, -1 * util.golort_factor(self.input.bias.shape[0]), util.golort_factor(self.input.bias.shape[0]))
+        torch.nn.init.uniform_(self.hidden.bias, -1 * util.golort_factor(self.hidden.bias.shape[0]), util.golort_factor(self.hidden.bias.shape[0]))
+        torch.nn.init.uniform_(self.output.bias, -1 * util.golort_factor(self.output.bias.shape[0]), util.golort_factor(self.output.bias.shape[0]))
+
 
     def forward(self, candidate_span_emb, flat_candidate_entity_scores,
-                candidate_span_ids, spans_log_mask, dummy_scores,
+                candidate_span_ids, spans_log_mask,
                 gold_ner_labels, candidate_mask
     ):
-        hidden1 = self.dropout(
-            self.relu(
+        hidden1 = nnf.dropout(
+            nnf.relu(
                 self.input(candidate_span_emb)
-            )
+            ), self.dropout
         )
 
-        hidden2 = self.dropout(
-            self.relu(
+        hidden2 = nnf.dropout(
+            nnf.relu(
                 self.hidden(hidden1)
-            )
+            ), self.dropout
         )
 
         scores = self.output(hidden2)
@@ -282,6 +291,10 @@ class NerScores(nn.Module):
             flat_ner_scores += (
                     self.config["span_score_weight"] * flat_candidate_entity_scores.unsqueeze(1)
             )
+
+        # [num_sentences, max_num_candidates_per_sentence, 1]
+        dummy_scores = torch.zeros_like(candidate_span_ids, dtype=torch.float32).unsqueeze(2)
+
 
         # [num_sentences, max_num_candidates, num_labels-1]
         ner_scores = flat_ner_scores[candidate_span_ids] + spans_log_mask.unsqueeze(2)

@@ -2,12 +2,13 @@ import pyhocon
 import os
 import errno
 import torch
-import span_prune_cpp
 import sys
 import codecs
 import subprocess
 import math
 from sklearn.metrics import classification_report, precision_recall_fscore_support
+#import psutil
+import functools
 
 from pip._vendor.requests.models import CONTENT_CHUNK_SIZE, Response
 
@@ -18,6 +19,156 @@ if MYPY_CHECK_RUNNING:
 
 def get_config(filename):
     return pyhocon.ConfigFactory.parse_file(filename)
+
+# def get_used_memory():
+#     return dict(psutil.virtual_memory()._asdict())['used'] / (1024 * 1024 * 1024)
+#
+# def get_free_memory():
+#     return dict(psutil.virtual_memory()._asdict())['free'] / (1024 * 1024 * 1024)
+#
+
+def span_prune(
+        span_scores,
+        candidate_starts,
+        candidate_ends,
+        num_output_spans,
+        max_sentence_length,
+        sort_spans,
+        suppress_crossing,
+        logger = None
+):
+    def sort_span_indices(i1, i2):
+        if candidate_starts[l][i1] < candidate_starts[l][i2]:
+            return -1
+        if candidate_starts[l][i1] > candidate_starts[l][i2]:
+            return 1
+        if candidate_ends[l][i1] < candidate_ends[l][i2]:
+            return -1
+        if candidate_ends[l][i1] > candidate_ends[l][i2]:
+            return 1
+
+        if i1 < i2:
+            return -1
+        else:
+            return 1
+
+    sort_span_keys = functools.cmp_to_key(sort_span_indices)
+
+    num_sentences = span_scores.shape[0]
+    num_input_spans = span_scores.shape[1]
+    max_num_output_spans = torch.max(num_output_spans)
+
+    #sorted_input_span_indices = torch.tensor(num_sentences, num_input_spans)
+
+    output_span_indices = torch.ones(num_sentences, max_num_output_spans)
+
+
+    # Sort spans by score
+    sorted_scores, sorted_input_span_indices = torch.sort(span_scores, descending=True)
+
+
+    for l in range(num_sentences):
+        top_span_indices = []
+        end_to_earliest_start = {}
+        start_to_latest_end = {}
+        current_span_index = 0
+        num_selected_spans = 0
+
+
+        while (
+            # selected spans are not equal to topk for that sent
+            num_selected_spans < num_output_spans[l] and
+            # Overall selected/skipped spans didn' reach the max input spans
+            current_span_index < num_input_spans
+        ):
+            i = sorted_input_span_indices[l][current_span_index]
+
+            any_crossing = False
+            if suppress_crossing:
+                start = candidate_starts[l][i]
+                end = candidate_ends[l][i]
+
+                for j in range(start, end):
+                    if j > start:
+                        latest_end_iter = None
+                        if j in start_to_latest_end:
+                            latest_end_iter = start_to_latest_end[j]
+
+                        if latest_end_iter and latest_end_iter > end:
+                            any_crossing = True
+                            break
+
+                    if j < end:
+                        earliest_start_iter = None
+                        if j in end_to_earliest_start:
+                            earliest_start_iter = end_to_earliest_start[j]
+
+                        if earliest_start_iter and earliest_start_iter < start:
+                            any_crossing = True
+                            break
+
+            if not any_crossing:
+                if sort_spans:
+                    top_span_indices.append(i.item())
+                else:
+                    output_span_indices[l][num_selected_spans] = i
+
+                num_selected_spans += 1
+
+                if suppress_crossing:
+                    start = candidate_starts[l][i]
+                    end = candidate_ends[l][i]
+
+                    latest_end_iter = None
+                    if start in start_to_latest_end:
+                        latest_end_iter = start_to_latest_end[start]
+
+                    if not latest_end_iter or end > latest_end_iter:
+                        start_to_latest_end[start] = end
+
+                    earliest_start_iter = None
+                    if end in end_to_earliest_start:
+                        earliest_start_iter = end_to_earliest_start[end]
+
+                    if not earliest_start_iter or start < earliest_start_iter:
+                        end_to_earliest_start[end] = start
+
+            current_span_index += 1
+
+        # Sort span indices to respect the candidate-start/ends
+        if sort_spans:
+            top_span_indices = sorted(top_span_indices, key=sort_span_keys)
+
+            for i in range(num_output_spans[l]):
+                output_span_indices[l][i] = top_span_indices[i]
+
+        # Pad with the last selected span index to ensure monotonicity.
+
+        last_selected = num_selected_spans - 1
+        if last_selected >= 0:
+            for i in range(num_selected_spans, max_num_output_spans):
+                output_span_indices[l][i]= output_span_indices[l][last_selected]
+
+
+    return output_span_indices
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def mkdirs(path):
@@ -80,10 +231,13 @@ def sequence_mask(lengths, maxlen=None, dtype=torch.bool):
     if maxlen is None:
         maxlen = lengths.max()
 
-    row_vector = torch.arange(0, maxlen)
+    if lengths.get_device() > -1:
+        row_vector = torch.arange(0, maxlen).to(lengths.get_device())
+    else:
+        row_vector = torch.arange(0, maxlen)
+
     matrix = torch.unsqueeze(lengths, dim=-1)
     mask = row_vector < matrix
-
     mask = mask.type(dtype)
     return mask
 
@@ -105,7 +259,6 @@ def flatten_emb(emb):
     elif emb_rank == 3:
         flattened_emb = emb.reshape(num_sentences * max_sentence_length, -1)
     else:
-        raise ValueError("Unsupported rank: {}".format(emb_rank))
         raise ValueError("Unsupported rank: {}".format(emb_rank))
 
     return flattened_emb
@@ -140,8 +293,10 @@ def get_batch_topk(
         topk_ratio,
         text_len,
         max_sentence_length,
+        device,
         sort_spans=False,
-        enforce_non_crossing=True
+        enforce_non_crossing=True,
+        logger=None
 ):
     num_sentences = candidate_starts.shape[0]
 
@@ -152,23 +307,18 @@ def get_batch_topk(
     )
 
     # [num_sentences, pruned_num_candidates = max(topk)]
-    min = -sys.maxsize - 1
-    candidate_scores[candidate_scores == float('-inf')] = min
-
-    # TODO: go through the pruning algorithm
-    predicted_indices = span_prune_cpp.extract_spans(
+    predicted_indices = span_prune(
         candidate_scores,
         candidate_starts,
         candidate_ends,
         topk,
         max_sentence_length,
         sort_spans,
-        enforce_non_crossing
+        enforce_non_crossing,
+        logger
     )
 
-
-    # TODO why repeated indices?
-    predicted_indices = predicted_indices.type(torch.int64)
+    predicted_indices = predicted_indices.type(torch.int64).to(device)
     # get corresponding span starts and ends
     predicted_starts = batch_gather(candidate_starts, predicted_indices)  # [num_sentences, pruned_num_candidates]
     predicted_ends = batch_gather(candidate_ends, predicted_indices)  # [num_sentences, pruned_num_candidates]
@@ -407,5 +557,8 @@ def index(a_list, value):
     if not idx.shape[0]:
         return None
 
-    return idx.item()
+    return idx[0].item()
+
+def golort_factor(fan_in):
+    return math.sqrt(6/(2 * fan_in))
 

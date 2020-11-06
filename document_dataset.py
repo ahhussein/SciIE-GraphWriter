@@ -5,6 +5,8 @@ import util
 import data_utils
 import random
 import h5py
+from copy import copy
+
 
 import torch
 
@@ -29,8 +31,9 @@ _predict_names = [
 ]
 
 class DocumentDataset():
-    def __init__(self, config, is_eval = False):
+    def __init__(self, config, args, is_eval = False, logger = None):
         self.config = config
+        self.args = args
         self.lm_layers = self.config["lm_layers"]
         self.lm_size = self.config["lm_size"]
         self.lm_file = h5py.File(config["lm_path"], "r")
@@ -40,11 +43,14 @@ class DocumentDataset():
         self.input_names = _input_names
         self.label_names = _label_names
         self.predict_names = _predict_names
+        self.logger = logger
 
 
         self.title = data.Field(sequential=True, batch_first=True,init_token="<start>", eos_token="<eos>",include_lengths=True)
         self.out = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>", include_lengths=True)
-
+        self.rawout = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>")
+        self.tgt = data.Field(sequential=True, batch_first=True, init_token="<start>", eos_token="<eos>")
+        self.nerd = data.Field(sequential=True, eos_token="<eos>")
         # Fields declaration
         self.fields = [
             ("tokens", data.RawField()),
@@ -71,21 +77,32 @@ class DocumentDataset():
             ("rel_len", data.RawField()),
             ("title", self.title),
             ("doc_len", data.RawField()),
-            ('out', self.out)
+            ("out", self.out),
+            ("tgt", self.tgt),
+            ("adj", data.RawField()),
+            ("relsraw", data.RawField()),
+            ("nerd", self.nerd),
+            ("rawent", data.RawField()),
+            ("rawout", self.rawout),
         ]
 
         self.rel_labels_inv = [""] + config["relation_labels"]
         if config["filter_reverse_relations"]:
             self.rel_labels_inv = [r for r in self.rel_labels_inv if "REVERSE" not in r]
 
-        self.rel_labels = {l: i for i, l in enumerate(self.rel_labels_inv)}
+        self.extended_rel_labels_inv = self.rel_labels_inv + ['MERGE', 'ROOT']
 
-        # TODO Understand the difference between the two glove files
-        self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"])
-        #
+        self.rel_labels = {l: i for i, l in enumerate(self.rel_labels_inv)}
+        self.rel_labels_extended = {l: i for i, l in enumerate(self.extended_rel_labels_inv)}
+
+        self.log('info', "context embeddings")
+        self.context_embeddings = data_utils.EmbeddingDictionary(config["context_embeddings"], logger=logger)
+
+        self.log('info', "head embeddings")
         self.head_embeddings = data_utils.EmbeddingDictionary(
             config["head_embeddings"],
-            maybe_cache=self.context_embeddings
+            maybe_cache=self.context_embeddings,
+            logger=logger
         )
 
         self.char_embedding_size = config["char_embedding_size"]
@@ -164,11 +181,10 @@ class DocumentDataset():
 
             #coref_eval_data[doc_id] = document
 
-        print("Loaded {} eval examples.".format(doc_count))
+        self.log("info", f"Loaded {doc_count} eval examples.")
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
 
             # TODO title
             title = 'Dummy title'
@@ -179,8 +195,20 @@ class DocumentDataset():
                 (
                     np.stack(np.array(doc_sentences_processed), 1).tolist()
                 ) + [
-                    title, len(doc_sentences_processed), out_text
+                    title, len(doc_sentences_processed)
                 ], self.fields)
+
+            adj, rel, entities2idx = self.mkGraph(example)
+
+            out_text, tgt_text, raw_out, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
+
+            example.out = out_text
+            example.tgt = tgt_text
+            example.nerd = nerd
+            example.adj = adj
+            example.relsraw = rel
+            example.rawent = ents
+            example.rawout = raw_out
 
             self.eval_examples.append(example)
 
@@ -194,6 +222,9 @@ class DocumentDataset():
         num_sentences = 0
         doc_count = 0
         cluster_id_offset = 0
+        eval_data = {}
+        coref_eval_data = {}
+
 
         with open(self.config["test_path"]) as f:
             eval_examples = [json.loads(jsonline) for jsonline in f.readlines()]
@@ -213,13 +244,14 @@ class DocumentDataset():
             num_sentences += len(doc_examples[-1])
             doc_count += 1
 
-            #coref_eval_data[doc_id] = document
+            eval_data[example['doc_key']] = data_utils.split_example_for_eval(document)
+            coref_eval_data[example['doc_key']] = document
 
-        print("Loaded {} eval examples.".format(doc_count))
+        self.log("info", f"Loaded {doc_count} eval examples.")
+
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
 
             # TODO title
             title = 'Dummy title'
@@ -230,10 +262,24 @@ class DocumentDataset():
                 (
                     np.stack(np.array(doc_sentences_processed), 1).tolist()
                 ) + [
-                    title, len(doc_sentences_processed), out_text
+                    title, len(doc_sentences_processed)
                 ], self.fields)
 
+            adj, rel, entities2idx = self.mkGraph(example)
+
+            out_text, tgt_text, raw_out, nerd, raw_ent = self.build_out_text_for_document(doc_sentences, entities2idx)
+
+            example.out = out_text
+            example.tgt = tgt_text
+            example.nerd = nerd
+            example.adj = adj
+            example.relsraw = rel
+            example.rawent = raw_ent
+            example.rawout = raw_out
+
             self.eval_examples.append(example)
+        self.eval_data = eval_data
+        self.coref_eval_data = coref_eval_data
 
     def _read_documents(self, train_examples):
         # List of documents, each holds a list of sentences.
@@ -257,24 +303,35 @@ class DocumentDataset():
             cluster_id_offset += len(document["clusters"])
             num_sentences += len(doc_examples[-1])
 
-        print("Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
+        self.log("info", "Load {} training documents with {} sentences, {} clusters, and {} mentions.".format(
             doc_id, num_sentences, cluster_id_offset, num_mentions))
+
 
         for doc_sentences in doc_examples:
             doc_sentences_processed = []
-            out_text = [word for sentence in doc_sentences for word in sentence['sentence']]
-
+            # TODO tgt
             # TODO title
             title = 'Dummy title'
 
             [doc_sentences_processed.append(self.tensorize_example(doc_sentence)) for doc_sentence in doc_sentences]
-
             example = data.Example.fromlist(
                 (
                     np.stack(np.array(doc_sentences_processed),1).tolist()
                 ) + [
-                    title, len(doc_sentences_processed), out_text
+                    title, len(doc_sentences_processed),
                 ]  , self.fields)
+
+            adj, rel, entities2idx = self.mkGraph(example)
+
+            out_text, tgt_text, raw_out, nerd, ents = self.build_out_text_for_document(doc_sentences, entities2idx)
+
+            example.out = out_text
+            example.tgt = tgt_text
+            example.nerd = nerd
+            example.adj = adj
+            example.relsraw = rel
+            example.rawent = ents
+            example.rawout = raw_out
 
             self.examples.append(example)
 
@@ -421,13 +478,18 @@ class DocumentDataset():
 
     def fix_batch(self, batch):
         for field in self.dataset.fields:
+            if field == 'nerd':
+                setattr(batch, field, getattr(batch, field).to(self.args.device))
+
             convert_tensor = True
             if field in ['tokens', 'doc_key']:
                 convert_tensor = False
-            if field in ['doc_len', 'title', 'out']:
+            if field in ['doc_len', 'title', 'out', 'adj', 'relsraw', 'tgt', 'rawent', 'nerd', 'rawout']:
                 continue
 
             setattr(batch, field, data_utils.pad_batch_tensors(getattr(batch, field), convert_tensor))
+            if convert_tensor:
+                setattr(batch, field, getattr(batch, field).to(self.args.device))
 
         batch.doc_len = torch.tensor(batch.doc_len)
         batch.ner_starts = batch.ner_starts.type(torch.int64)
@@ -443,7 +505,30 @@ class DocumentDataset():
 
     def _build_vocab(self):
         self.title.build_vocab(self.dataset, min_freq=5)
-        self.out.build_vocab(self.dataset, min_freq=5)
+
+        generics = ['<method>', '<material>', '<otherscientificterm>', '<metric>', '<task>']
+        self.rawout.build_vocab(self.dataset, min_freq=5)
+        self.out.vocab = copy(self.rawout.vocab)
+
+        self.out.vocab.itos.extend(generics)
+        for x in generics:
+            self.out.vocab.stoi[x] = self.out.vocab.itos.index(x)
+
+        self.nerd.build_vocab(self.dataset, min_freq=0)
+        for x in generics:
+            self.nerd.vocab.stoi[x] = self.out.vocab.stoi[x]
+
+        self.tgt.vocab = copy(self.out.vocab)
+
+        # Extend target to include all the entity typs with numbers up to x
+        specials = "method material otherscientificterm metric task".split(" ")
+        # The size of the tgt vocab will still be the size without these specials
+        for x in specials:
+            for y in range(5000):
+                s = "<" + x + "_" + str(y) + ">"
+                # Change indices of those vocab
+                self.tgt.vocab.stoi[s] = len(self.tgt.vocab.itos) + y
+
         self.config.ntoks = len(self.out.vocab)
 
         # # Extend the outpt vocab to contain these tokens
@@ -462,13 +547,180 @@ class DocumentDataset():
 
     def reverse(self, x, ents):
         # TODO, ents
-        #ents = ents[0]
+        ents = ents[0]
         vocab = self.out.vocab
-        s = ' '.join(
-            [vocab.itos[y] if y < len(vocab.itos) else 0 for j, y in enumerate(x)])
+        # TODO remove
+        s = ' '.join([vocab.itos[y] if y<len(vocab.itos) else ents[y-len(vocab.itos)].upper() if (y-len(vocab.itos)) < len(ents) else '<unk>' for j,y in enumerate(x)])
 
         #s = ' '.join(
         #    [vocab.itos[y] if y < len(vocab.itos) else ents[y - len(vocab.itos)].upper() for j, y in enumerate(x)])
         # s = ' '.join([vocab.itos[y] if y<len(vocab.itos) else ents[y-len(vocab.itos)] for j,y in enumerate(x)])
         if "<eos>" in s: s = s.split("<eos>")[0]
         return s
+
+    def build_out_text_for_document(self, doc_sentences, entities2idx):
+        out_text = []
+        tgt_text = []
+        raw_out = []
+        global_idx = -1
+        nerd = []
+        ents = []
+        ent_text = []
+        for sent_idx, sentence in enumerate(doc_sentences):
+            nerd.extend([f"<{sentence['ner'][i][2].replace(' ', '').lower()}>" for i in range(len(sentence['ner']))])
+
+            current_ent = None
+            ner_pointer = 0
+            if sentence['ner']:
+                entity_idx = entities2idx[
+                    f"{sentence['ner'][ner_pointer][0] - sentence['word_offset']}-{sentence['ner'][ner_pointer][1] - sentence['word_offset']}-{sent_idx}"
+                ]
+
+                current_ent = (
+                    sentence['ner'][ner_pointer][0],
+                    sentence['ner'][ner_pointer][1],
+                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>",
+                    f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}_{entity_idx}>"
+                )
+
+            for word in sentence['sentence']:
+                global_idx += 1
+
+                # Update current ent if necessary
+                if current_ent and global_idx > current_ent[1]:
+                    ner_pointer += 1
+
+                    if len(sentence['ner']) > ner_pointer:
+                        entity_idx = entities2idx[
+                            f"{sentence['ner'][ner_pointer][0] - sentence['word_offset']}-{sentence['ner'][ner_pointer][1] - sentence['word_offset']}-{sent_idx}"
+                        ]
+
+                        current_ent = (
+                            sentence['ner'][ner_pointer][0],
+                            sentence['ner'][ner_pointer][1],
+                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}>",
+                            f"<{sentence['ner'][ner_pointer][2].replace(' ', '').lower()}_{entity_idx}>"
+                        )
+                    else:
+                        current_ent = None
+
+                if not current_ent or global_idx < current_ent[0]:
+                    out_text.append(word)
+                    raw_out.append(word)
+                    tgt_text.append(word)
+                    continue
+
+                if global_idx >= current_ent[0] and global_idx <= current_ent[1]:
+                    ent_text.append(word)
+                    raw_out.append(word)
+                    # If this marks the end word of the span, append the type here
+                    if global_idx == current_ent[1]:
+                        out_text.append(current_ent[2])
+                        tgt_text.append(current_ent[3])
+                        ents.append(' '.join(ent_text))
+                        ent_text = []
+                        continue
+
+        return out_text, tgt_text, raw_out, nerd, ents
+
+    def mkGraph(self, example):
+        # Build dict for entities
+        entities2idx = {}
+        abs_index = 0
+        for sent_idx, sent_num_entities in enumerate(example.ner_len):
+            for ent_idx in range(sent_num_entities):
+                ent_start = example.ner_starts[sent_idx][ent_idx]
+                ent_end = example.ner_ends[sent_idx][ent_idx]
+                entities2idx[f"{ent_start}-{ent_end}-{sent_idx}"] = abs_index
+                abs_index += 1
+
+        # Preprocess corefs
+        cluster2candidates = {}
+        for sent_idx in range(len(example.coref_cluster_ids)):
+            for list_idx, cluster_id in enumerate(example.coref_cluster_ids[sent_idx]):
+                cluster_id = cluster_id.item()
+                if cluster_id not in cluster2candidates:
+                    cluster2candidates[cluster_id] = []
+
+                # Ensure entity has reference in the ner section
+                if f"{example.coref_starts[sent_idx][list_idx]}-{example.coref_ends[sent_idx][list_idx]}-{sent_idx}" not in entities2idx:
+                    continue
+
+                cluster2candidates[cluster_id].append((
+                    example.coref_starts[sent_idx][list_idx],
+                    example.coref_ends[sent_idx][list_idx],
+                    sent_idx
+                ))
+
+        ent_len = sum(example.ner_len)
+        coref_len = sum([len(item) * (len(item)-1) for _, item in cluster2candidates.items()])
+
+        rel_len = sum(example.rel_len)
+        adjsize = ent_len + 1 + 2 * rel_len + coref_len
+        adj = torch.zeros(adjsize, adjsize)
+
+        rel = [self.rel_labels_extended['ROOT']-1]
+
+        # global node
+        for i in range(ent_len):
+            adj[i, ent_len] = 1
+            adj[ent_len, i] = 1
+
+        # Self connection
+        for i in range(adjsize):
+            adj[i, i] = 1
+
+        # converting relations into nodes
+        for sent_idx, sent_num_rel in enumerate(example.rel_len):
+            for rel_idx in range(sent_num_rel):
+                rel.extend([
+                    (example.rel_labels[sent_idx][rel_idx]).item()-1,
+                    (example.rel_labels[sent_idx][rel_idx] + len(self.rel_labels_extended)).item() - 2
+                ])
+
+                first_ent_start = example.rel_e1_starts[sent_idx][rel_idx]
+                first_ent_end = example.rel_e1_ends[sent_idx][rel_idx]
+                second_ent_start = example.rel_e2_starts[sent_idx][rel_idx]
+                second_ent_end = example.rel_e2_ends[sent_idx][rel_idx]
+
+                a = entities2idx[f"{first_ent_start}-{first_ent_end}-{sent_idx}"]
+                b = entities2idx[f"{second_ent_start}-{second_ent_end}-{sent_idx}"]
+                c = ent_len + len(rel) - 2
+                d = ent_len + len(rel) - 1
+
+                adj[a, c] = 1
+                adj[c, b] = 1
+                adj[b, d] = 1
+                adj[d, a] = 1
+
+        for cluster, entities in cluster2candidates.items():
+            for idx, entity in enumerate(entities):
+                for idx2, entity2 in enumerate(entities):
+                    if idx == idx2:
+                        continue
+
+                    a = entities2idx[f"{entity[0]}-{entity[1]}-{entity[2]}"]
+                    b = entities2idx[f"{entity2[0]}-{entity2[1]}-{entity2[2]}"]
+
+                    if idx < idx2:
+                        rel.extend([
+                         self.rel_labels_extended['MERGE'] - 1
+                        ])
+
+
+                    else:
+                        rel.extend([
+                            self.rel_labels_extended['MERGE'] + len(self.rel_labels_extended) - 2
+                        ])
+
+                    c = ent_len + len(rel) - 1
+
+                    adj[a, c] = 1
+                    adj[c, b] = 1
+
+        return (adj, rel, entities2idx)
+
+    def log(self, level, message):
+        if self.logger:
+            getattr(self.logger, level)(message)
+
